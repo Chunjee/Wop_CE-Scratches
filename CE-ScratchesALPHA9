@@ -2,27 +2,18 @@
 ;Persistent
 ;\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/
 
-#NoEnv  ; Recommended for performance and compatibility
+#NoEnv
 #NoTrayIcon
 #SingleInstance force
 #MaxThreads 1
-#include inireadwrite
 SendMode Input
 Version_Name = Alpha v0.8.1
-;#Warn  ; Enable warnings to assist with detecting common errors.
+;#Warn  ;Enable warnings
 
 
 ;/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\
 ;PREP AND STARTUP
 ;\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/
-
-SetWorkingDir %A_ScriptDir%
-Working_Directory = %A_WorkingDir%
-inifile = %A_WorkingDir%\data\settings.ini
-
-INI_Init(inifile)
-INI_Load(inifile)
-;INI_Save(inifile)
 
 HardCodedGlobals()
 ;###Invoke and set Global Variables
@@ -33,7 +24,6 @@ StartInternalGlobals()
 ;~~~~~~~~~~~~~~~~~~~~~
 BuildGUI()
 ShowGUI()
-
 
 
 ;/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\
@@ -51,7 +41,7 @@ GetNewXML()
 
 
 ;###Read XML previously downloaded to FILECONTENTS Var
-FileRead, FileContents, %A_WorkingDir%\data\temp\XML.txt
+FileRead, FileContents, %A_ScriptDir%\data\temp\XML.txt
 
 
 ;###Invoke and set Global Variables
@@ -66,10 +56,9 @@ oExcel.Visible := false ; make Excel Application invisible
 ;oExcel.Worksheets("Sheet2").Delete
 
 ;###Read XML previously downloaded to FILECONTENTS Var
-FileRead, FileContents, %A_WorkingDir%\data\temp\XML.txt
+FileRead, FileContents, %A_ScriptDir%\data\temp\XML.txt
 
 ;###Clean XML so that is can be read one line at a time
-;StringReplace, NewStr, OldStr, %A_SPACE%, +, All
 ReturnReplace("race_number")
 ReturnReplace("race_changes")
 ReturnReplace("track_name")
@@ -85,19 +74,18 @@ JustReplace("</change_description><old_value>"," ")
 	FileAppend,
 	(
 	%FileContents%
-	), %A_ScriptDir%/data/temp/ConvertedXML.txt
+	), %A_ScriptDir%\data\temp\ConvertedXML.txt
 FileContents = ;Free the memory after being written to file.
 
 	;###This does nothing but let the progress bar know how many lines there are total
-	Loop, read, %A_WorkingDir%\data\temp\ConvertedXML.txt
+	Loop, read, %A_ScriptDir%\data\temp\ConvertedXML.txt
 	{
 	TotalTXTLines += 1
 	}
 	
 	
 	;###Read Each line of Converted XML. Valued Information is extracted and thrown into the WriteToExcel function.
-	Loop, read, %A_WorkingDir%\data\temp\ConvertedXML.txt
-	;Loop, read, %A_ScriptDir%/data/temp/ConvertedXML.txt
+	Loop, read, %A_ScriptDir%\data\temp\ConvertedXML.txt
 	{
 
 ReadLine = %A_LoopReadLine%
@@ -130,13 +118,12 @@ Gui, Add, Text, x390 y45, Entries Effected: %EffectedEntries%
 ;Modify Race Column to fit whole title (4th column, 40 pixels?)
 LV_ModifyCol(4, 40)
 
-;TrayTip , CE Scratches Scanner, Found %ScratchCounter% Scratches.
 
 ;###Close Excel Database
 ;http://msdn.microsoft.com/en-us/library/aa215515
 oExcel.ActiveWorkbook.saved := true
 CreateArchiveDir()
-path = %A_WorkingDir%\data\archive\%CurrentYear%\%CurrentMonth%\%CurrentDay%\TB_%CurrentDate%
+path = %A_ScriptDir%\data\archive\%CurrentYear%\%CurrentMonth%\%CurrentDay%\TB_%CurrentDate%
 oExcel.ActiveWorkbook.SaveAs(path) ;disable for testing on XP
 oExcel.ActiveWorkbook.saved := true
 oExcel.Quit
@@ -152,14 +139,14 @@ CheckHarness:
 DiableAllButtons()
 LV_Delete()
 StartInternalGlobals()
-FileDelete, %A_WorkingDir%\data\archive\%CurrentYear%\%CurrentMonth%\%CurrentDay%\HN_%CurrentDate%.xlsx
+FileDelete, %A_ScriptDir%\data\archive\%CurrentYear%\%CurrentMonth%\%CurrentDay%\HN_%CurrentDate%.xlsx
 DownloadAllHarnessTracks()
 oExcel := ComObjCreate("Excel.Application") ; create Excel Application object
 oExcel.Workbooks.Add ; create a new workbook (oWorkbook := oExcel.Workbooks.Add)
 oExcel.Visible := false ; make Excel Application invisible
 
 
-	Loop, %A_WorkingDir%\data\temp\tracksrawhtml\*_H.txt
+	Loop, %A_ScriptDir%\data\temp\tracksrawhtml\*_H.txt
 {
 	Loop, read, %A_ScriptDir%\data\temp\tracksrawhtml\%A_LoopFileName%
 	{
@@ -177,7 +164,7 @@ WriteHNtoExcel()
 
 ReadExceltoListview_HN()
 
-path = %A_WorkingDir%\data\archive\%CurrentYear%\%CurrentMonth%\%CurrentDay%\HN_%CurrentDate%
+path = %A_ScriptDir%\data\archive\%CurrentYear%\%CurrentMonth%\%CurrentDay%\HN_%CurrentDate%
 oExcel.ActiveWorkbook.SaveAs(path)
 oExcel.ActiveWorkbook.saved := true
 oExcel.Quit
@@ -206,10 +193,6 @@ Ignored_CE = 9
 
 return
 }
-
-
-
-
 
 
 
@@ -268,7 +251,6 @@ ReRead = 0
 		;We also cant go to the next page immediately because we need to check if there is some CE array to output
 		If (Number = "")
 		{
-		;Msgbox, Blank encountered
 		Blank_Counter += 1
 			If (Blank_Counter >= 2)
 			{
@@ -298,7 +280,6 @@ ReRead = 0
 		{
 			If (ArrX >= 2) 
 			{
-			;Msgbox, CE Output
 			WriteTrackToListView()
 			FirstHorse_Toggle = 1
 			CE_Arr := [[x],[y]]
@@ -315,7 +296,6 @@ ReRead = 0
 		;MsgBox % CE_Arr.1.1
 		CE_Race_Found = %Race%
 		FirstHorseProgramNumber = %Number%
-		;Msgbox, first %FirstHorseProgramNumber%
 		Current_Race = %Race%
 		FirstHorse_Toggle = 0
 		Scratch_Counter = 0 ;might be a better place for this
@@ -331,7 +311,6 @@ ReRead = 0
 			;Msgbox, %Current_Race% -  %CE_Race_Found% - %Race%
 			If (Current_Race = Race)
 			{
-			;MsgBox, !!!!!! CE Found !!!!!!  %Name%
 			ArrX += 1
 			CE_Arr[ArrX,1] := Number
 			CE_Arr[ArrX,3] := Name
@@ -351,7 +330,6 @@ ReRead = 0
 		;Msgbox, Scratch_Counter is %Scratch_Counter%
 			If (ArrX >= 2) ; && Name != "")
 			{
-			;Msgbox, CE Output
 			EffectedEntries += 1
 			WriteTrackToListView()
 			FirstHorse_Toggle = 1
@@ -439,7 +417,6 @@ TotalExcelIterations := (TrackCounter + HorseCounter)
 	;Done, move to next line.
 	ExcelPointerX += 1
 	}
-;Msgbox, Last horse is %Buffer_Name%
 
 }
 
@@ -472,15 +449,7 @@ CE_FirstFound += 1
 	}
 
 ReadArrayToListView()
-
 }
-
-
-
-
-
-
-
 
 
 
@@ -509,11 +478,6 @@ global
 	}
 
 }
-
-
-
-
-
 
 
 
@@ -552,33 +516,6 @@ Buffer_RaceLV := "Race " . Buffer_RaceNumber
 ;StringTrimRight, Buffer_RaceLV, Buffer_RaceLV, 7
 LV_Add("", "", "", Buffer_RaceLV, "")
 }
-
-
-
-
-
-
-
-Provemeagain(number)
-{
-	Loop, %number%
-	{
-Buffer_Number2 = 1
-Buffer_Name2 = alf
-Buffer_Status2 = Scratched
-Buffer_Race2 = 10
-
-alf = ALFING
-LV_Add("", alf, alf,alf,alf)
-	}
-}
-
-
-
-
-
-
-
 
 
 WriteTBtoExcel()
@@ -697,9 +634,6 @@ global
 
 
 
-
-
-
 CleanXML(TargetWord,Label,TrimLeft,TrimRight)
 {
 global
@@ -724,7 +658,6 @@ return
 
 
 
-
 JustReplace(Old,New)
 {
 global
@@ -733,20 +666,6 @@ global
 StringReplace, FileContents, FileContents, %Old%, %New%, All
 return
 }
-
-
-
-
-
-DownloadScratches(Track)
-{
-global
-
-;UrlDownloadToFile, http://www.equibase.com/static/latechanges/html/latechanges%Track%.html, %A_WorkingDir%\%Track%.txt
-;http://www.equibase.com/static/latechanges/html/latechangesIND-USA.html
-}
-return
-
 
 
 
@@ -760,17 +679,6 @@ return
 }
 
 
-SaveandClose()
-{
-global
-
-ControlGetText, TracksGUI2, vTracksGUI, 
-FileAppend,
-(
-%TracksGUI2%
-), %A_WorkingDir%\data\StartingTracks.txt
-return
-}
 
 
 GetNewXML()
@@ -779,20 +687,20 @@ global
 
 FileRemoveDir, %A_ScriptDir%\data\temp , 1
 FileCreateDir, %A_ScriptDir%\data\temp
-FileCreateDir, %A_WorkingDir%\data\temp\tracksrawhtml
-FileDelete, %A_WorkingDir%\data\temp\ConvertedXML.txt
-UrlDownloadToFile, http://www.equibase.com/premium/eqbLateChangeXMLDownload.cfm, %A_WorkingDir%\data\temp\XML.txt
+FileCreateDir, %A_ScriptDir%\data\temp\tracksrawhtml
+FileDelete, %A_ScriptDir%\data\temp\ConvertedXML.txt
+UrlDownloadToFile, http://www.equibase.com/premium/eqbLateChangeXMLDownload.cfm, %A_ScriptDir%\data\temp\XML.txt
 ;Copy to Archive
-FileCopy %A_WorkingDir%\data\temp\XML.txt, %A_WorkingDir%\data\archive\%CurrentYear%\%CurrentMonth%\%CurrentDay%\XML_%CurrentDate%.txt, 1
+FileCopy %A_ScriptDir%\data\temp\XML.txt, %A_ScriptDir%\data\archive\%CurrentYear%\%CurrentMonth%\%CurrentDay%\XML_%CurrentDate%.txt, 1
 }
 
 UseExistingXML()
 {
 global
 
-FileDelete, %A_WorkingDir%\data\temp\ConvertedXML.txt
+FileDelete, %A_ScriptDir%\data\temp\ConvertedXML.txt
 FileSelectFile, XMLPath
-FileCopy, %XMLPath%, %A_WorkingDir%\data\temp\XML.txt, 1
+FileCopy, %XMLPath%, %A_ScriptDir%\data\temp\XML.txt, 1
 }
 
 
@@ -806,49 +714,45 @@ FormatTime, CurrentYear,, yyyy
 FormatTime, CurrentMonth,, MMMM
 FormatTime, CurrentDay,, dd
 
-FileCreateDir, %A_WorkingDir%\data\archive\%CurrentYear%\%CurrentMonth%\%CurrentDay%\
-FileDelete, %A_WorkingDir%\data\archive\%CurrentYear%\%CurrentMonth%\%CurrentDay%\TB_%CurrentDate%.xlsx
+FileCreateDir, %A_ScriptDir%\data\archive\%CurrentYear%\%CurrentMonth%\%CurrentDay%\
+FileDelete, %A_ScriptDir%\data\archive\%CurrentYear%\%CurrentMonth%\%CurrentDay%\TB_%CurrentDate%.xlsx
 }
-
 
 
 
 DownloadAllHarnessTracks()
 {
-UrlDownloadToFile, http://tote.racingchannel.com/MEN----H.PHP, %A_WorkingDir%\data\temp\tracksrawhtml\1Main.txt
-Loop, read, %A_ScriptDir%\data\temp\tracksrawhtml\1Main.txt
-{
-	If (InStr(A_LoopReadLine, "Changes"))
+UrlDownloadToFile, http://tote.racingchannel.com/MEN----H.PHP, %A_ScriptDir%\data\temp\tracksrawhtml\1Main.txt
+	Loop, read, %A_ScriptDir%\data\temp\tracksrawhtml\1Main.txt
 	{
-	;Linetarget = %Label%
-	StringTrimRight, TrackUrl, A_LoopReadLine, 52
-	StringTrimLeft, TrackUrl, TrackUrl, 13
-	StringTrimRight, TrackCode, TrackUrl, 6
-	StringTrimLeft, TrackCode, TrackCode, 3
-	;ValueLine = 1
-	
-	TrackToDownload := "http://tote.racingchannel.com/" . TrackUrl
-	;http://tote.racingchannel.com/CHGMAY-C.PHP
-	UrlDownloadToFile, %TrackToDownload%, %A_WorkingDir%\data\temp\tracksrawhtml\%TrackCode%.txt
-	
-	
-	FileRead, FileContents, %A_WorkingDir%\data\temp\tracksrawhtml\%TrackCode%.txt
+		If (InStr(A_LoopReadLine, "Changes"))
+		{
+		;Linetarget = %Label%
+		StringTrimRight, TrackUrl, A_LoopReadLine, 52
+		StringTrimLeft, TrackUrl, TrackUrl, 13
+		StringTrimRight, TrackCode, TrackUrl, 6
+		StringTrimLeft, TrackCode, TrackCode, 3
+		;ValueLine = 1
+		
+		TrackToDownload := "http://tote.racingchannel.com/" . TrackUrl
+		;http://tote.racingchannel.com/CHGMAY-C.PHP
+		UrlDownloadToFile, %TrackToDownload%, %A_ScriptDir%\data\temp\tracksrawhtml\%TrackCode%.txt
+		
+		
+		FileRead, FileContents, %A_ScriptDir%\data\temp\tracksrawhtml\%TrackCode%.txt
 
-	;###Clean quotes out of HTML so that is can be read more accurately.
-	StringReplace, FileContents, FileContents,",+, All
-	;";Comment
-	
-	FileAppend,
-	(
-	%FileContents%
-	), %A_WorkingDir%\data\temp\tracksrawhtml\%TrackCode%_H.txt
-	FileContents = ;Free the memory after being written to file.
+		;###Clean quotes out of HTML so that is can be read more accurately.
+		StringReplace, FileContents, FileContents,",+, All
+		;";Comment
+		
+		FileAppend,
+		(
+		%FileContents%
+		), %A_ScriptDir%\data\temp\tracksrawhtml\%TrackCode%_H.txt
+		FileContents = ;Free the memory after being written to file.
+		}
+		
 	}
-	
-
-}
-
-
 
 }
 
@@ -856,25 +760,11 @@ DownloadAllTracksHTML_DEPRECIATED()
 {
 global
 
-Loop, read, %A_ScriptDir%\data\StartingTracks.txt,
-{
-UrlDownloadToFile, http://www.equibase.com/static/latechanges/html/latechanges%A_LoopReadLine%.html, %A_WorkingDir%\data\temp\tracksrawhtml\%A_LoopReadLine%.txt
-
-;StringReplace, A_LoopReadLine, A_LoopReadLine, %A_Tab%,, All
-;StringTrimLeft, NewName, A_LoopReadLine, 3
-;StringTrimRight, OldName, A_LoopReadLine, 3
-;StringReplace, NewName, NewName, %A_Tab%,, All
-;StringReplace, OldName, OldName, %A_Tab%,, All
-;StringReplace, NewName, NewName, #,, All
-;StringReplace, OldName, OldName, #,, All
-;StringLower, NewName, NewName
-;StringLower, OldName, OldName
-;Msgbox, %OldName% Will become %NewName%
-
-;Msgbox %A_ScriptDir%\Files\%Region%\%NewName%%Tomorrow%p.exe
-;FileMove, %A_ScriptDir%\Files\%Region%\%OldName%%Tomorrow%p.exe, %A_ScriptDir%\Files\%Region%\%NewName%%Tomorrow%p.exe
-;FileMove, %A_ScriptDir%\Files\%Region%\%OldName%%Tomorrow%c.dbf, %A_ScriptDir%\Files\%Region%\%NewName%%Tomorrow%c.dbf
-}
+	Loop, read, %A_ScriptDir%\data\StartingTracks.txt,
+	{
+	UrlDownloadToFile, http://www.equibase.com/static/latechanges/html/latechanges%A_LoopReadLine%.html, %A_ScriptDir%\data\temp\tracksrawhtml\%A_LoopReadLine%.txt
+	}
+	
 }
 
 ReadTrackFiles()
@@ -884,14 +774,14 @@ global
 Needle = www.equibase.com/profiles/Results
 
 
-	Loop, %A_WorkingDir%\data\temp\tracksrawhtml\*.txt
+	Loop, %A_ScriptDir%\data\temp\tracksrawhtml\*.txt
 	{
 	Filepath = %A_LoopFileFullPath%
 	TrackFile = %A_LoopField%
 	;Msgbox, Loopfield is with txt? %A_LoopField% %A_LoopFileFullPath%
 		Loop, read, %A_LoopFileFullPath%,
 		{
-		IfInString, A_LoopReadLine, %Needle%
+			IfInString, A_LoopReadLine, %Needle%
 			{
 			;Msgbox, %A_LoopReadLine%
 			StringTrimRight, TrackName, A_LoopReadLine, 32
@@ -945,11 +835,6 @@ Pause
 return
 
 
-F8::
-ListVars
-sleep 6000
-return
-
 ;~~~~~~~~~~~~~~~~~~~~~
 ;Buttons
 ;~~~~~~~~~~~~~~~~~~~~~
@@ -958,11 +843,6 @@ ButtonSaveandClose:
 SaveandClose()
 return
 
-
-ButtonCheckEquibaseNow:
-;DownloadAllTracksHTML()
-ReadTrackFiles()
-return
 
 ShiftNotes:
 Today:= %A_Now%
@@ -993,7 +873,6 @@ Gui, Tab, Options
 ;Gui, Add, ListView, x2 y70 w490 h580 Grid Checked, #|Status|Name|Race
 
 Gui, Show, x130 y90 h622 w490, Scratch Detector
-;Gui, Show, x127 y87 h608 w489, Scratch Detector
 Return
 }
 
@@ -1022,8 +901,6 @@ GuiControl, enable, Open Shift Notes
 }
 
 
-
-
 ShowGUI()
 {
 global
@@ -1048,10 +925,9 @@ ExitApp
 ;Timers
 ;~~~~~~~~~~~~~~~~~~~~~
 ProgressBarTimer:
-SetTimer, ProgressBarTimer, 250
+SetTimer, ProgressBarTimer, -250
 GuiControl,, UpdateProgress, %vProgressBar%
 Return
-
 
 
 
