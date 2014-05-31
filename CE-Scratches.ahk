@@ -1,15 +1,19 @@
 ﻿;/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\
-;Persistent
+; Description
 ;\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/
+; Downloads and Parses Equibase XML into an Excel spreadsheet. Then reads the 'database' looking for coupled entry scratches.
+; For Harness tracks, raw HTML is downloaded and parsed into Excel the same way from Racing Channel.
+; 
 
-#NoEnv
-#NoTrayIcon
-#SingleInstance force
-#MaxThreads 1
-SendMode Input
-Version_Name = Alpha v0.8.1
-;#Warn  ;Enable warnings
 
+;~~~~~~~~~~~~~~~~~~~~~
+;Compile Options
+;~~~~~~~~~~~~~~~~~~~~~
+StartUp()
+Version_Name = Alpha v0.8.3
+
+;Dependencies
+;None
 
 ;/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\
 ;PREP AND STARTUP
@@ -31,8 +35,11 @@ ShowGUI()
 ;\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/
 
 UpdateButton:
+;Immediately disable all GUI buttons to prevent user from causing two Excel sheets from being made. 
 DiableAllButtons()
+;Clear the GUI Listview (Contains all found Coupled Entries)
 LV_Delete()
+
 
 ;Switch comment here for live or testing
 ;Download XML of all TB Track Changes
@@ -77,7 +84,7 @@ JustReplace("</change_description><old_value>"," ")
 	), %A_ScriptDir%\data\temp\ConvertedXML.txt
 FileContents = ;Free the memory after being written to file.
 
-	;###This does nothing but let the progress bar know how many lines there are total
+	;###This does nothing but count the number of lines to be used in progress bar calculations
 	Loop, read, %A_ScriptDir%\data\temp\ConvertedXML.txt
 	{
 	TotalTXTLines += 1
@@ -85,6 +92,7 @@ FileContents = ;Free the memory after being written to file.
 	
 	
 	;###Read Each line of Converted XML. Valued Information is extracted and thrown into the WriteToExcel function.
+	;THIS NEEDS TO BE RE-WRITTEN USING REGULAR EXPRESSIONS
 	Loop, read, %A_ScriptDir%\data\temp\ConvertedXML.txt
 	{
 
@@ -107,22 +115,23 @@ WriteTBtoExcel()
 	
 
 
-;### Look through Excel and send scratched CE to Listview for User to see.
+;### Look through Excel and send scratched CE to Listview for User to see
 ReadExceltoListview()
 
 
-;### Show effected Races so we know if there is a new change.
+;### Show number of effected Races so user knows if there is a new change.
 Gui, Tab, Scratches
 Gui, Add, Text, x390 y45, Entries Effected: %EffectedEntries%
 
-;Modify Race Column to fit whole title (4th column, 40 pixels?)
+
+;Modify Race Column to fit whole title (4th column, 40 pixels/units)
 LV_ModifyCol(4, 40)
 
 
 ;###Close Excel Database
 ;http://msdn.microsoft.com/en-us/library/aa215515
 oExcel.ActiveWorkbook.saved := true
-CreateArchiveDir()
+CreateArchiveDir() ;this function just makes the archive directory
 path = %A_ScriptDir%\data\archive\%CurrentYear%\%CurrentMonth%\%CurrentDay%\TB_%CurrentDate%
 oExcel.ActiveWorkbook.SaveAs(path) ;disable for testing on XP
 oExcel.ActiveWorkbook.saved := true
@@ -134,7 +143,8 @@ Return
 ;~~~~~~~~~~~~~~~~~~~~~
 ;Check Harness Tracks
 ;~~~~~~~~~~~~~~~~~~~~~
-
+; This is basically the same instructions as TB but its a little outdated as it was just copy-pasted. Working on a way to merge Excel reading as one function
+; Main problem is that Harness HMTL does not always include the other parts of a Coupled Entry; so it is fundimentally different in that way.
 CheckHarness:
 DiableAllButtons()
 LV_Delete()
@@ -145,25 +155,28 @@ oExcel := ComObjCreate("Excel.Application") ; create Excel Application object
 oExcel.Workbooks.Add ; create a new workbook (oWorkbook := oExcel.Workbooks.Add)
 oExcel.Visible := false ; make Excel Application invisible
 
-
+	
+	;Read Each Track's HTML
 	Loop, %A_ScriptDir%\data\temp\tracksrawhtml\*_H.txt
-{
-	Loop, read, %A_ScriptDir%\data\temp\tracksrawhtml\%A_LoopFileName%
-	{
-ReadLine = %A_LoopReadLine%
-CleanXML("<TITLE>","TN",8,16)
-CleanXML("<TD WIDTH=+150+><B><U>","RN",23,13)
-CleanXML("part of entry","COUPLED",1,1)
-CleanXML("<TD WIDTH=+20+><B>","PN",19,9)
-CleanXML("<TD ALIGN=+LEFT+ WIDTH=+150+><B>","HN",33,9)
-CleanXML("<TD ALIGN=+LEFT+ WIDTH=+250+>","SC",39,5)
-WriteHNtoExcel()
+	{	
+		;Read each line in the HTML looking for "part of entry"
+		Loop, read, %A_ScriptDir%\data\temp\tracksrawhtml\%A_LoopFileName%
+		{
+		ReadLine = %A_LoopReadLine%
+		CleanXML("<TITLE>","TN",8,16)
+		CleanXML("<TD WIDTH=+150+><B><U>","RN",23,13)
+		CleanXML("part of entry","COUPLED",1,1)
+		CleanXML("<TD WIDTH=+20+><B>","PN",19,9)
+		CleanXML("<TD ALIGN=+LEFT+ WIDTH=+150+><B>","HN",33,9)
+		CleanXML("<TD ALIGN=+LEFT+ WIDTH=+250+>","SC",39,5)
+		WriteHNtoExcel()
+		}
 	}
 
-}
-
+;Excel is finished, read it to the GUI ListView
 ReadExceltoListview_HN()
 
+;Save and close Excel
 path = %A_ScriptDir%\data\archive\%CurrentYear%\%CurrentMonth%\%CurrentDay%\HN_%CurrentDate%
 oExcel.ActiveWorkbook.SaveAs(path)
 oExcel.ActiveWorkbook.saved := true
@@ -176,10 +189,6 @@ $F1::
 reload
 Return
 
-#+!v::
-Listvars
-return
-
 ;/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\
 ; FUNCTIONS
 ;\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/
@@ -189,6 +198,7 @@ HardCodedGlobals()
 global
 
 RaceNumber = 0
+;Ignore any entry over this number, example: don't look for Entry 9 or 9A. An attempt to make program run faster. Should be set to 4 or 5 at some point
 Ignored_CE = 9
 
 return
@@ -226,13 +236,13 @@ ReRead = 0
 		Race := oExcel.Sheets("T" . SheetSelect).Range("H" . ExcelPointerX).Value ;Race
 		}
 	ReRead = 0
-	;MsgBox, ~~~ %Name%
+
 	ExcelReadAgain:
 	;Ok this exists to save the next horse found after all of a CE has been detected
-	; I mean, since the loop doesnt detect the end of a CE list until a different program number is found, we need to go here
+	; I mean, since the loop doesn't detect the end of a CE list until a different program number is found, we need to go here
 	; when a new horse is found and triggers the CE output, but not loose that new horse which might be a 2 with a 2B coming next
 		
-		;discard this horse because we don't care about anything over 9, unless there was a race with 9+ CE but that should never happen
+		;discard this horse because we don't care about anything over 9, unless there was a race with 9+ CE but that should never happen. Eventually work down to 4 or 5
 		If (Number > Ignored_CE)
 		{
 		Continue
@@ -247,8 +257,8 @@ ReRead = 0
 		}
 		
 		;End of Track Reached, Turn Page~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-		;This is highest because we dont want things getting confused with "" matching "" for a coupled entry
-		;We also cant go to the next page immediately because we need to check if there is some CE array to output
+		;This is highest because we don't want things getting confused with "" matching "" for a coupled entry
+		;We also can't go to the next page immediately because we need to check if there is some CE array to output
 		If (Number = "")
 		{
 		Blank_Counter += 1
@@ -263,6 +273,7 @@ ReRead = 0
 			}	
 		}
 		
+		;This is where I am working on reporting RE-LIVENED RUNNERS
 		;If Marked as livened, send cause I say so
 		;If (Status = "UNSCRATCH")
 		;{
@@ -293,7 +304,6 @@ ReRead = 0
 		CE_Arr[ArrX,3] := Name
 		CE_Arr[ArrX,2] := Status
 		CE_Arr[ArrX,4] := Race
-		;MsgBox % CE_Arr.1.1
 		CE_Race_Found = %Race%
 		FirstHorseProgramNumber = %Number%
 		Current_Race = %Race%
@@ -305,10 +315,8 @@ ReRead = 0
 		
 		
 		;2nd HORSE FOUND!~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-		;Msgbox, Is %FirstHorseProgramNumber% in %Number% 
 		IfInString, Number, %FirstHorseProgramNumber%
 		{
-			;Msgbox, %Current_Race% -  %CE_Race_Found% - %Race%
 			If (Current_Race = Race)
 			{
 			ArrX += 1
@@ -321,13 +329,13 @@ ReRead = 0
 			}
 		
 		}
+		;DEPRECIATED - I don't remember
 		;If (InStr(Number, FirstHorseProgramNumber) && CE_Race_Found = %Race%)
 		
 		
 		
 		
 		;ALL ELSE~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-		;Msgbox, Scratch_Counter is %Scratch_Counter%
 			If (ArrX >= 2) ; && Name != "")
 			{
 			EffectedEntries += 1
@@ -458,21 +466,17 @@ ReadArrayToListView()
 global
 
 	x = 0
-	Loop %ArrX%,
+	Loop %ArrX%, ;Uh ok this needs to be changed to MaxIndex(Array) not some dumb variable
 	{
 	x += 1
+	
+	;DEPRECIATED - Just write out the Array without assigning values to buffer variables. This is left as a note for what each array value holds
+	;Buffer_Number := CE_Arr[x,1]
+	;Buffer_Name := CE_Arr[x,2]
+	;Buffer_Status := CE_Arr[x,3]
+	;Buffer_Race := CE_Arr[x,4]
 		
-		;DEPRECIATED
-		;Put Each Array item into Buffer_Variable
-		;Buffer_Number := CE_Arr[x,1]
-		;Buffer_Name := CE_Arr[x,2]
-		;Buffer_Status := CE_Arr[x,3]
-		;Buffer_Race := CE_Arr[x,4]
-		;Add the each horse into the listview
-		;LV_Add("", Buffer_Number, Buffer_Status, Buffer_Name, Buffer_Race)
-		
-		
-	;Writes 
+	;Found Coupled Entries are stored into this Array, write them out to the GUI Listview
 	LV_Add("", CE_Arr[x,1], CE_Arr[x,2], CE_Arr[x,3], CE_Arr[x,4])
 	LV_ModifyCol()
 	}
@@ -487,7 +491,7 @@ global
 
 	If Status = "Scratched"
 	{
-	Msgbox, increase scratch counter
+	;increase scratch counter
 	Scratch_Counter += 1
 	}
 }
@@ -518,6 +522,7 @@ LV_Add("", "", "", Buffer_RaceLV, "")
 }
 
 
+;This needs an overhaul after converting to Regular Expressions, also needs to be structured as more flexible parameter function
 WriteTBtoExcel()
 {
 global
@@ -528,8 +533,6 @@ global
 	oExcel.Worksheets.Add
 	TrackCounter2 := "T" . TrackCounter
 	oExcel.ActiveSheet.Name := TrackCounter2
-	;oExcel.ActiveSheet.Name := Stringy ;WORKING!
-	;ActiveSheet.Name(Track) := Stringy
 	ExcelPointerX = 1
 	oExcel.Range("A" . ExcelPointerX).Value := Stringy
 	oExcel.Range("G" . ExcelPointerX).Value := TrackCounter
@@ -538,13 +541,10 @@ global
 	if Linetarget = RN
 	{
 	RaceNumber = %Stringy%
-	;ListVars
-	;ExcelPointerX += 1
 	}
-	if Linetarget = PN ;&& Stringy <= %InterestNumber_Limit%
+	if Linetarget = PN ;&& Stringy <= %InterestNumber_Limit%  ;Another good place to reduce runtime by skipping Ignored_CE excel writing
 	{
 	oExcel.Range("A" . ExcelPointerX).Value := Stringy
-		;IfInString, Stringy, A ;|| IfInString, Stringy, B || IfInString, Stringy, C || IfInString, Stringy, X
 		If InStr(Stringy, "A") || InStr(Stringy, "B") || InStr(Stringy, "C") || InStr(Stringy, "X")
 		{
 		oExcel.Range("A" . ExcelPointerX . ":" . "E" . (ExcelPointerX - 1)).Interior.ColorIndex := 3 ; fill range of cell color number 3
@@ -561,24 +561,14 @@ global
 	{
 	oExcel.Range("E" . ExcelPointerX).Value := "Scratched"
 	}
-	;if Linetarget = COUPLED
-	;{
-	;oExcel.Range("F" . ExcelPointerX).Value := Stringy
-	;}
 	if Linetarget = UNSCRATCH
 	{
-	;Write Unscratched to Excel
 	oExcel.Range("E" . ExcelPointerX).Value := "UNSCRATCHED"
-	
-
-	;Grab HorseName and Race Number
-	;LV_Add("", "RE-LIVENED", , CE_Arr[x,3], CE_Arr[x,4])
 	}
-	;Stringy = "ALF"
-	;Linetarget = "ALF"
+
 }
 
-
+;Same Story here, looks more like a subroutine then a function, make this a priority
 WriteHNtoExcel()
 {
 global
@@ -589,10 +579,6 @@ global
 	oExcel.Worksheets.Add
 	TrackCounter2 := "T" . TrackCounter
 	oExcel.ActiveSheet.Name := TrackCounter2
-	;oExcel.ActiveSheet.Name := Stringy ;WORKING!
-	;ActiveSheet.Name("Track")
-	;ActiveSheet.Name(Track)
-	;ActiveSheet.Name(Track) := Stringy
 	ExcelPointerX = 1
 	oExcel.Range("A" . ExcelPointerX).Value := Stringy
 	oExcel.Range("G" . ExcelPointerX).Value := TrackCounter
@@ -601,8 +587,6 @@ global
 	if Linetarget = RN
 	{
 	RaceNumber = %Stringy%
-	;ListVars
-	;ExcelPointerX += 1
 	}
 	if Linetarget = PN ;&& Stringy <= %InterestNumber_Limit%
 	{
@@ -628,12 +612,12 @@ global
 	{
 	oExcel.Range("F" . ExcelPointerX).Value := Stringy
 	}
-	Stringy = "ALF"
-	Linetarget = "ALF"
+	Stringy = ;Empty Variable
+	Linetarget = ;Empty Variable
 }
 
 
-
+;This function exists only becuase I didn't know how to use Regular Expressions. Should be depreciated asap
 CleanXML(TargetWord,Label,TrimLeft,TrimRight)
 {
 global
@@ -651,9 +635,7 @@ ValueLine := 0
 		StringTrimLeft, Stringy, Stringy, %TrimLeft%
 		ValueLine = 1
 		}
-		
 }
-return
 
 
 
@@ -664,7 +646,6 @@ global
 
 ; Replace all spaces with pluses:
 StringReplace, FileContents, FileContents, %Old%, %New%, All
-return
 }
 
 
@@ -675,7 +656,6 @@ global
 
 ; Replace all spaces with pluses:
 StringReplace, FileContents, FileContents, %Word%,`n%Word%, All
-return
 }
 
 
@@ -798,6 +778,14 @@ Needle = www.equibase.com/profiles/Results
 ; Variables
 ;~~~~~~~~~~~~~~~~~~~~~
 
+StartUp()
+{
+#NoEnv
+#NoTrayIcon
+#SingleInstance force
+#MaxThreads 1
+}
+
 StartInternalGlobals()
 {
 global
@@ -827,6 +815,7 @@ A_LF := "`n"
 }
 
 
+
 ;~~~~~~~~~~~~~~~~~~~~~
 ; Temp Controls
 ;~~~~~~~~~~~~~~~~~~~~~
@@ -838,11 +827,6 @@ return
 ;~~~~~~~~~~~~~~~~~~~~~
 ;Buttons
 ;~~~~~~~~~~~~~~~~~~~~~
-
-ButtonSaveandClose: 
-SaveandClose()
-return
-
 
 ShiftNotes:
 Today:= %A_Now%
@@ -928,49 +912,3 @@ ProgressBarTimer:
 SetTimer, ProgressBarTimer, -250
 GuiControl,, UpdateProgress, %vProgressBar%
 Return
-
-
-
-;~~~~~~~~~~~~~~~~~~~~~
-;Excel Notes
-;~~~~~~~~~~~~~~~~~~~~~
-
-EXCELHAPPY()
-{
-;Merge selected
-;oExcel.Selection.Merge()
-
-;Read cell into var of certain sheet
-;CellF6Value := oWorkbook.Worksheets("Sheet1").Range("F6").Value
-
-;read select a lot?
-objExcel.Worksheets(1).Cells(1, "A").End(-4121).Select
-
-;oExcel.Range("G" . ExcelPointerX).Value := TrackCounter
-;A1 := oExcel.Range("A1").Value ; get value from cell A1, and store it in A1 variable
-
-;MsgBox % oExcel.Sheets(16).Range("A7").Value
-
-;RegEx for "<button Cid="  middle   "/>"
-;NewStr := RegExReplace(var , "U)\<button Cid\=.*\/\>(`r|`n)")
-
-;close with no save?
-X1.Workbooks("BookName.xls").Close(False)
-
-
-Buffer_Number := oExcel.Sheets("T" . SheetSelect).Range("A" . ExcelPointerX).Value
-
-;oExcel.ActiveWorkbook.saved := true
-;oExcel.Workbooks.Close(%A_ScriptDir%/data/temp/excel.xls)
-;oExcel.Workbooks.Exit
-;oExcel.Workbooks(1).Close
-;oExcel.Quit
-;oExcel.Workbook.Close
-;Sleep 30000
-;http://msdn.microsoft.com/en-us/library/aa215515
-;ActiveWorkbook.saved := true
-;http://msdn.microsoft.com/en-us/library/office/ff841185.aspx
-;ActiveWorkbook.SaveAs(FileName)
-;ExitApp
-
-}
