@@ -10,18 +10,28 @@
 ;Compile Options
 ;~~~~~~~~~~~~~~~~~~~~~
 StartUp()
-Version_Name = Alpha v0.8.3
+Version_Name = v0.9
 
 ;Dependencies
-;None
+#Include %A_ScriptDir%\Functions
+#Include sort_arrays
+#Include json_obj
+
+;For Debug Only
+#Include util_arrays
 
 ;/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\
 ;PREP AND STARTUP
 ;\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/
 
-HardCodedGlobals()
+Sb_GlobalNameSpace()
 ;###Invoke and set Global Variables
 StartInternalGlobals()
+
+FileRead, MemoryFile, %A_ScriptDir%\DB.json
+AllHorses_Array := Fn_JSONtooOBJ(MemoryFile)
+MemoryFile := ;Blank
+
 
 ;~~~~~~~~~~~~~~~~~~~~~
 ;GUI
@@ -47,20 +57,8 @@ GetNewXML()
 ;UseExistingXML()
 
 
-;###Read XML previously downloaded to FILECONTENTS Var
-FileRead, FileContents, %A_ScriptDir%\data\temp\XML.txt
-
-
 ;###Invoke and set Global Variables
 StartInternalGlobals()
-
-;~~~~~~~~~~~~~~~~~~~~~
-;Excel
-;~~~~~~~~~~~~~~~~~~~~~
-oExcel := ComObjCreate("Excel.Application") ; create Excel Application object
-oExcel.Workbooks.Add ; create a new workbook (oWorkbook := oExcel.Workbooks.Add)
-oExcel.Visible := false ; make Excel Application invisible
-;oExcel.Worksheets("Sheet2").Delete
 
 ;###Read XML previously downloaded to FILECONTENTS Var
 FileRead, FileContents, %A_ScriptDir%\data\temp\XML.txt
@@ -91,32 +89,123 @@ FileContents = ;Free the memory after being written to file.
 	}
 	
 	
-	;###Read Each line of Converted XML. Valued Information is extracted and thrown into the WriteToExcel function.
+	
+	ArraX := AllHorses_Array.MaxIndex()
+	
+	;###Read Each line of Converted XML. Valued Information is extracted put into an array
 	;THIS NEEDS TO BE RE-WRITTEN USING REGULAR EXPRESSIONS
-	Loop, read, %A_ScriptDir%\data\temp\ConvertedXML.txt
+	Loop, Read, %A_ScriptDir%\data\temp\ConvertedXML.txt
 	{
 
-ReadLine = %A_LoopReadLine%
+	ReadLine := A_LoopReadLine
+	
+		REG = horse_name="(.*)"
+		RegexMatch(ReadLine, REG, RE_HorseName)
+		If (RE_HorseName1 != "")
+		{
+		ArraX += 1
+		Fn_InsertHorseData()
+		The_HorseName := RE_HorseName1
+		}
+		
+		REG = track_name="(.*)" id
+		RegexMatch(ReadLine, REG, RE_TrackName)
+		If (RE_TrackName1 != "")
+		{
+		The_TrackName := RE_TrackName1
+		}
+		
+		REG = race_number="(.*)">
+		RegexMatch(ReadLine, REG, RE_RaceNumber)
+		If (RE_RaceNumber1 != "")
+		{
+		The_RaceNumber := RE_RaceNumber1
+		}
+		
+		REG = program_number="(.*)">
+		RegexMatch(ReadLine, REG, RE_ProgramNumber)
+		If (RE_ProgramNumber1 != "")
+		{
+		The_ProgramNumber := RE_ProgramNumber1
+		The_EntryNumber := Fn_ExtractEntryNumber(RE_ProgramNumber1)
+		}
+		
+		REG = Scratched N
+		RegexMatch(ReadLine, "Scratched (N)", RE_Scratch)
+		If (RE_Scratch1 != "")
+		{
+		The_ScratchStatus := 1
+		;Fn_InsertHorseData()
+		}
+		
+		REG = new_value>N<
+		RegexMatch(ReadLine, "new_value>(N)<", RE_Scratch)
+		If (RE_Scratch1 != "")
+		{
+		The_ScratchStatus := 0
+		;Fn_InsertHorseData()
+		}
+	
+	
+		RegexMatch(ReadLine, "Coupled (Type)", RE_Scratch)
+		If (RE_Scratch1 != "")
+		{
+		The_ScratchStatus := ""
+		}
+		
+		
 
-CleanXML("track_name","TN",12,31)
-CleanXML("race_number","RN",13,3)
-CleanXML("Coupled Type","COUPLED",44,1)
-CleanXML("program_number","PN",16,2)
-CleanXML("horse_name","HN",12,2)
-CleanXML("Scratched N","SC",0,3)
-CleanXML("new_value>N<","UNSCRATCH",0,0)
-WriteTBtoExcel()
-
+	;CleanXML("Coupled Type","COUPLED",44,1)
+	;CleanXML("program_number","PN",16,2)
+	;CleanXML("horse_name","HN",12,2)
+	;CleanXML("Scratched N","SC",0,3)
+	;CleanXML("new_value>N<","UNSCRATCH",0,0)
+	;WriteTBtoExcel()
+	;Fn_WriteToArray()
 
 	TotalWrittentoExcel += 1
 	vProgressBar := 100 * (TotalWrittentoExcel / TotalTXTLines)
 	GuiControl,, UpdateProgress, %vProgressBar%
 	}
+
+	
+;AllHorses_Array := {TrackName:"", HorseName:"", ProgramNumber:"", EntryNumber:"", RaceNumber:"", Scratched:"" , Seen:""}
+	
+Fn_Sort2DArray(AllHorses_Array, "ProgramNumber")	
+;Fn_Sort2DArray(AllHorses_Array, "EntryNumber")
+Fn_Sort2DArray(AllHorses_Array, "RaceNumber")
+Fn_Sort2DArray(AllHorses_Array, "TrackName")
+
+
+
+	
 	
 
 
+
+
+
+	
+
+
+
+
+
+
+For index, obj in AllHorses_Array
+	list3 .= AllHorses_Array[index].ProgramNumber . "    " . AllHorses_Array[index].HorseName . "`n"
+	
+FileAppend, %list3%, %A_ScriptDir%\allllll.txt
+
+
+;For Array Visualization
+;Array_Gui(AllHorses_Array)
+;FileAppend, % Array_Print(AllHorses_Array), %A_ScriptDir%\alf.txt
+
+
 ;### Look through Excel and send scratched CE to Listview for User to see
-ReadExceltoListview()
+ReadtoListview()
+
 
 
 ;### Show number of effected Races so user knows if there is a new change.
@@ -128,15 +217,13 @@ Gui, Add, Text, x390 y45, Entries Effected: %EffectedEntries%
 LV_ModifyCol(4, 40)
 
 
-;###Close Excel Database
-;http://msdn.microsoft.com/en-us/library/aa215515
-oExcel.ActiveWorkbook.saved := true
-CreateArchiveDir() ;this function just makes the archive directory
-path = %A_ScriptDir%\data\archive\%CurrentYear%\%CurrentMonth%\%CurrentDay%\TB_%CurrentDate%
-oExcel.ActiveWorkbook.SaveAs(path) ;disable for testing on XP
-oExcel.ActiveWorkbook.saved := true
-oExcel.Quit
 EnableAllButtons()
+
+
+MemoryFile := Fn_JSONfromOBJ(AllHorses_Array)
+FileDelete, %A_ScriptDir%\DB.json
+FileAppend, %MemoryFile%, %A_ScriptDir%\DB.json
+MemoryFile := ;Blank
 Return
 
 
@@ -162,7 +249,7 @@ oExcel.Visible := false ; make Excel Application invisible
 		;Read each line in the HTML looking for "part of entry"
 		Loop, read, %A_ScriptDir%\data\temp\tracksrawhtml\%A_LoopFileName%
 		{
-		ReadLine = %A_LoopReadLine%
+		ReadLine = %A_LoopReadLine%	
 		CleanXML("<TITLE>","TN",8,16)
 		CleanXML("<TD WIDTH=+150+><B><U>","RN",23,13)
 		CleanXML("part of entry","COUPLED",1,1)
@@ -193,50 +280,87 @@ Return
 ; FUNCTIONS
 ;\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/
 
-HardCodedGlobals()
+Sb_GlobalNameSpace()
 {
 global
 
 RaceNumber = 0
 ;Ignore any entry over this number, example: don't look for Entry 9 or 9A. An attempt to make program run faster. Should be set to 4 or 5 at some point
-Ignored_CE = 9
 
-return
+
+CE_Arr := [[x],[y]]
+ArrX = 0
+
+AllHorses_Array := {TrackName:"", HorseName:"", ProgramNumber:"", EntryNumber:"", RaceNumber:"", Scratched:"" , Seen:""}
+Ignored_CE = 4
+Return
 }
 
-
-
-ReadExceltoListview()
+Fn_InsertHorseData()
 {
 global
 
-ExcelSheet_Top = 3
-ExcelPointerX = 2
+	X := AllHorses_Array.MaxIndex() 
+	Loop % X
+	{
+		If (The_HorseName = AllHorses_Array[A_Index, "HorseName"] || The_HorseName = "") ; && The_ScratchStatus != 0
+		{
+		;X := A_Index
+		;Horse already exists in this object, skip
+		Return
+		}
+	}
+	
+	X += 1
+	AllHorses_Array[X,"TrackName"] := The_TrackName
+	AllHorses_Array[X,"HorseName"] := The_HorseName
+	AllHorses_Array[X,"ProgramNumber"] := The_ProgramNumber
+	AllHorses_Array[X,"EntryNumber"] := The_EntryNumber
+	AllHorses_Array[X,"RaceNumber"] := The_RaceNumber
+	AllHorses_Array[X,"Scratched"] := The_ScratchStatus
+}
+
+
+ReadtoListview()
+{
+global
+
 Scratch_Counter = 0
-Blank_Counter = 0
 FirstHorse_Toggle = 1
-SheetSelect = 1
 CE_FirstFound = 0
-CE_Arr := [[x],[y]]
-ArrX = 0
 ReRead = 0
 
 ;DEPRECIATED Find Total Horses for iterations for excel checking. TrackCounter is added since it will read a blank line for every track.
 ;DEPRECIATED TotalExcelIterations := (TrackCounter + HorseCounter)
-
-	While (SheetSelect <= TrackCounter)
-	{		
-		
-		If (SheetSelect <= TrackCounter && ReRead != 1)
+	
+							AllHorses_ArraX := 0
+							MaxArraySize := AllHorses_Array.MaxIndex()
+							Loop, %MaxArraySize%
+							{
+								If (The_HorseName = AllHorses_Array[A_Index, "HorseName"] && The_ScratchStatus != 0)
+								{
+								;Alf
+								}
+							}
+	
+	
+	While (FinishedReading != 1)
+	{
+	;MSgbox, going
+	If (AllHorses_ArraX >= MaxArraySize)
+	{
+	FinishedReading := 1
+	}
+		If (ReRead != 1)
 		{
-		ExcelPointerX += 1
-		Number := oExcel.Sheets("T" . SheetSelect).Range("A" . ExcelPointerX).Value ;Number
-		Name := oExcel.Sheets("T" . SheetSelect).Range("B" . ExcelPointerX).Value ;Name
-		Status := oExcel.Sheets("T" . SheetSelect).Range("E" . ExcelPointerX).Value ;Status
-		Race := oExcel.Sheets("T" . SheetSelect).Range("H" . ExcelPointerX).Value ;Race
+		AllHorses_ArraX += 1
+		Number := AllHorses_Array[AllHorses_ArraX,"ProgramNumber"]
+		Name := AllHorses_Array[AllHorses_ArraX,"HorseName"]
+		Status := AllHorses_Array[AllHorses_ArraX,"Scratched"]
+		Race := AllHorses_Array[AllHorses_ArraX,"RaceNumber"]
 		}
 	ReRead = 0
-
+	
 	ExcelReadAgain:
 	;Ok this exists to save the next horse found after all of a CE has been detected
 	; I mean, since the loop doesn't detect the end of a CE list until a different program number is found, we need to go here
@@ -247,45 +371,31 @@ ReRead = 0
 		{
 		Continue
 		}
-		IfInString, Race, .0000
-		{
-		StringTrimRight, Race, Race, 7
-		}
-		IfInString, Number, .0000
-		{
-		StringTrimRight, Number, Number, 7
-		}
+				IfInString, Race, .0000
+				{
+				StringTrimRight, Race, Race, 7
+				}
+				IfInString, Number, .0000
+				{
+				StringTrimRight, Number, Number, 7
+				}
 		
 		;End of Track Reached, Turn Page~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 		;This is highest because we don't want things getting confused with "" matching "" for a coupled entry
 		;We also can't go to the next page immediately because we need to check if there is some CE array to output
-		If (Number = "")
+		NewRace := Race
+		If (NewRace != LastRace)
 		{
+		LastRace := Race
 		Blank_Counter += 1
 			If (Blank_Counter >= 2)
 			{
-			SheetSelect += 1
-			ExcelPointerX = 2 ;Always adds +1 at top of loop, so will select 3rd row immediately.
 			CE_FirstFound = 0 ;Set next track to have found no Coupled Entries
 			Blank_Counter = 0
-			;FirstHorse_Toggle = 1
 			Continue
 			}	
 		}
-		
-		;This is where I am working on reporting RE-LIVENED RUNNERS
-		;If Marked as livened, send cause I say so
-		;If (Status = "UNSCRATCH")
-		;{
-		;LV_AddTrack()
-		;LV_AddRace()
-		;LV_Add("", TRACK, , , )
-		;LV_Add("", RE-LIVENED, %Name%, %Race% )
-		;Continue
-		;}
-		
-		
-		
+		;Msgbox, %Name%
 		;FIRST HORSE GOING INTO ARRAY~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 		If (FirstHorse_Toggle = 1 && Name != "")
 		{
@@ -294,7 +404,7 @@ ReRead = 0
 			WriteTrackToListView()
 			FirstHorse_Toggle = 1
 			CE_Arr := [[x],[y]]
-			ArrX := 0
+			ArrX = 0
 			Scratch_Counter = 0
 			ReRead = 1
 			Continue
@@ -329,9 +439,6 @@ ReRead = 0
 			}
 		
 		}
-		;DEPRECIATED - I don't remember
-		;If (InStr(Number, FirstHorseProgramNumber) && CE_Race_Found = %Race%)
-		
 		
 		
 		
@@ -773,6 +880,16 @@ Needle = www.equibase.com/profiles/Results
 	}
 }
 
+Fn_ExtractEntryNumber(para_ProgramNumber)
+{
+	RegexMatch(para_ProgramNumber, "(\d*)", RE_EntryNumber)
+	If (RE_EntryNumber != "")
+	{
+	Return %RE_EntryNumber%
+	}
+Return "ERROR Retrieving Entry Number"	
+}
+
 
 ;~~~~~~~~~~~~~~~~~~~~~
 ; Variables
@@ -781,7 +898,7 @@ Needle = www.equibase.com/profiles/Results
 StartUp()
 {
 #NoEnv
-#NoTrayIcon
+;#NoTrayIcon
 #SingleInstance force
 #MaxThreads 1
 }
@@ -901,8 +1018,6 @@ Gui, Destroy
 }
 
 GuiClose:
-oExcel.ActiveWorkbook.saved := true
-oExcel.Quit
 ExitApp
 
 ;~~~~~~~~~~~~~~~~~~~~~
