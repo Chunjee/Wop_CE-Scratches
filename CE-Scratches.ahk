@@ -53,8 +53,8 @@ LV_Delete()
 
 ;Switch comment here for live or testing
 ;Download XML of all TB Track Changes
-GetNewXML()
-;UseExistingXML()
+;GetNewXML()
+UseExistingXML()
 
 
 ;###Invoke and set Global Variables
@@ -96,7 +96,7 @@ FileContents = ;Free the memory after being written to file.
 	;THIS NEEDS TO BE RE-WRITTEN USING REGULAR EXPRESSIONS
 	Loop, Read, %A_ScriptDir%\data\temp\ConvertedXML.txt
 	{
-
+	
 	ReadLine := A_LoopReadLine
 	
 		REG = horse_name="(.*)"
@@ -127,7 +127,8 @@ FileContents = ;Free the memory after being written to file.
 		If (RE_ProgramNumber1 != "")
 		{
 		The_ProgramNumber := RE_ProgramNumber1
-		The_EntryNumber := Fn_ExtractEntryNumber(RE_ProgramNumber1)
+		The_EntryNumber := Fn_ConvertEntryNumber(RE_ProgramNumber1)
+		The_EntryNumber := The_RaceNumber * 100 + The_EntryNumber
 		}
 		
 		REG = Scratched N
@@ -145,8 +146,7 @@ FileContents = ;Free the memory after being written to file.
 		The_ScratchStatus := 0
 		;Fn_InsertHorseData()
 		}
-	
-	
+		
 		RegexMatch(ReadLine, "Coupled (Type)", RE_Scratch)
 		If (RE_Scratch1 != "")
 		{
@@ -154,7 +154,6 @@ FileContents = ;Free the memory after being written to file.
 		}
 		
 		
-
 	;CleanXML("Coupled Type","COUPLED",44,1)
 	;CleanXML("program_number","PN",16,2)
 	;CleanXML("horse_name","HN",12,2)
@@ -168,12 +167,13 @@ FileContents = ;Free the memory after being written to file.
 	GuiControl,, UpdateProgress, %vProgressBar%
 	}
 
-	
 ;AllHorses_Array := {TrackName:"", HorseName:"", ProgramNumber:"", EntryNumber:"", RaceNumber:"", Scratched:"" , Seen:""}
+
+
 	
-Fn_Sort2DArray(AllHorses_Array, "ProgramNumber")	
-;Fn_Sort2DArray(AllHorses_Array, "EntryNumber")
-Fn_Sort2DArray(AllHorses_Array, "RaceNumber")
+Fn_Sort2DArray(AllHorses_Array, "EntryNumber")
+;Fn_Sort2DArray(AllHorses_Array, "ProgramNumber")
+;Fn_Sort2DArray(AllHorses_Array, "RaceNumber")
 Fn_Sort2DArray(AllHorses_Array, "TrackName")
 
 
@@ -192,10 +192,10 @@ Fn_Sort2DArray(AllHorses_Array, "TrackName")
 
 
 
-For index, obj in AllHorses_Array
-	list3 .= AllHorses_Array[index].ProgramNumber . "    " . AllHorses_Array[index].HorseName . "`n"
+;For index, obj in AllHorses_Array
+;	list3 .= AllHorses_Array[index].ProgramNumber . "    " . AllHorses_Array[index].HorseName . "`n"
 	
-FileAppend, %list3%, %A_ScriptDir%\allllll.txt
+;FileAppend, %list3%, %A_ScriptDir%\allllll.txt
 
 
 ;For Array Visualization
@@ -346,7 +346,8 @@ ReRead = 0
 	
 	While (FinishedReading != 1)
 	{
-	;MSgbox, going
+	;traytip, alf, %Number%, 10, 1
+	Msgbox, alf, %Number%, 1
 	If (AllHorses_ArraX >= MaxArraySize)
 	{
 	FinishedReading := 1
@@ -371,6 +372,7 @@ ReRead = 0
 		{
 		Continue
 		}
+		Msgbox, %Number% %Name% %AllHorses_ArraX%
 				IfInString, Race, .0000
 				{
 				StringTrimRight, Race, Race, 7
@@ -379,23 +381,21 @@ ReRead = 0
 				{
 				StringTrimRight, Number, Number, 7
 				}
-		
 		;End of Track Reached, Turn Page~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 		;This is highest because we don't want things getting confused with "" matching "" for a coupled entry
 		;We also can't go to the next page immediately because we need to check if there is some CE array to output
-		NewRace := Race
-		If (NewRace != LastRace)
-		{
-		LastRace := Race
-		Blank_Counter += 1
-			If (Blank_Counter >= 2)
-			{
-			CE_FirstFound = 0 ;Set next track to have found no Coupled Entries
-			Blank_Counter = 0
-			Continue
-			}	
-		}
-		;Msgbox, %Name%
+		;NewRace := Race
+		;If (NewRace != LastRace)
+		;{
+		;LastRace := Race
+		;Blank_Counter += 1
+			;If (Blank_Counter >= 2)
+			;{
+			;CE_FirstFound = 0 ;Set next track to have found no Coupled Entries
+			;Blank_Counter = 0
+			;Continue
+			;}	
+		;}
 		;FIRST HORSE GOING INTO ARRAY~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 		If (FirstHorse_Toggle = 1 && Name != "")
 		{
@@ -880,12 +880,32 @@ Needle = www.equibase.com/profiles/Results
 	}
 }
 
+
+Fn_ConvertEntryNumber(para_ProgramNumber)
+{
+	RegexMatch(para_ProgramNumber, "(\d+)(\D*)|(\d+)", RE_EntryNumber)
+	If (RE_EntryNumber2 != "")
+	{
+	RE_EntryNumber2 := Asc(RE_EntryNumber2)
+	RE_EntryNumber2 := RE_EntryNumber2 - 64
+	}
+	Else
+	{
+	RE_EntryNumber2 := 0
+	}
+RE_EntryNumber := RE_EntryNumber1 * 10 + RE_EntryNumber2
+;Msgbox, %para_ProgramNumber% is now %RE_EntryNumber% : %RE_EntryNumber1%
+Return %RE_EntryNumber%
+;Return "ERROR Retrieving Entry Number"
+}
+
+
 Fn_ExtractEntryNumber(para_ProgramNumber)
 {
 	RegexMatch(para_ProgramNumber, "(\d*)", RE_EntryNumber)
-	If (RE_EntryNumber != "")
+	If (RE_EntryNumber1 != "")
 	{
-	Return %RE_EntryNumber%
+	Return %RE_EntryNumber1%
 	}
 Return "ERROR Retrieving Entry Number"	
 }
