@@ -128,7 +128,7 @@ FileContents = ;Free the memory after being written to file.
 		{
 		The_ProgramNumber := RE_ProgramNumber1
 		The_EntryNumber := Fn_ConvertEntryNumber(RE_ProgramNumber1)
-		The_EntryNumber := The_RaceNumber * 100 + The_EntryNumber
+		The_EntryNumber := The_RaceNumber * 1000 + The_EntryNumber
 		}
 		
 		REG = Scratched N
@@ -171,10 +171,10 @@ FileContents = ;Free the memory after being written to file.
 
 
 	
-Fn_Sort2DArray(AllHorses_Array, "EntryNumber")
-;Fn_Sort2DArray(AllHorses_Array, "ProgramNumber")
+;Fn_Sort2DArray(AllHorses_Array, "EntryNumber")
+	;Fn_Sort2DArray(AllHorses_Array, "ProgramNumber")
 ;Fn_Sort2DArray(AllHorses_Array, "RaceNumber")
-Fn_Sort2DArray(AllHorses_Array, "TrackName")
+;Fn_Sort2DArray(AllHorses_Array, "TrackName")
 
 
 
@@ -300,6 +300,8 @@ Fn_InsertHorseData()
 {
 global
 
+;The_HorseNameLength := StrLen(The_HorseName)
+
 	X := AllHorses_Array.MaxIndex() 
 	Loop % X
 	{
@@ -311,6 +313,8 @@ global
 		}
 	}
 	
+	If(The_HorseName != "")
+	{
 	X += 1
 	AllHorses_Array[X,"TrackName"] := The_TrackName
 	AllHorses_Array[X,"HorseName"] := The_HorseName
@@ -318,6 +322,7 @@ global
 	AllHorses_Array[X,"EntryNumber"] := The_EntryNumber
 	AllHorses_Array[X,"RaceNumber"] := The_RaceNumber
 	AllHorses_Array[X,"Scratched"] := The_ScratchStatus
+	}
 }
 
 
@@ -347,7 +352,7 @@ ReRead = 0
 	While (FinishedReading != 1)
 	{
 	;traytip, alf, %Number%, 10, 1
-	Msgbox, alf, %Number%, 1
+	;Msgbox, alf, %Number%
 	If (AllHorses_ArraX >= MaxArraySize)
 	{
 	FinishedReading := 1
@@ -372,7 +377,7 @@ ReRead = 0
 		{
 		Continue
 		}
-		Msgbox, %Number% %Name% %AllHorses_ArraX%
+		;Msgbox, %Number% %Name% %AllHorses_ArraX%
 				IfInString, Race, .0000
 				{
 				StringTrimRight, Race, Race, 7
@@ -893,7 +898,7 @@ Fn_ConvertEntryNumber(para_ProgramNumber)
 	{
 	RE_EntryNumber2 := 0
 	}
-RE_EntryNumber := RE_EntryNumber1 * 10 + RE_EntryNumber2
+RE_EntryNumber := RE_EntryNumber1 * 100 + RE_EntryNumber2
 ;Msgbox, %para_ProgramNumber% is now %RE_EntryNumber% : %RE_EntryNumber1%
 Return %RE_EntryNumber%
 ;Return "ERROR Retrieving Entry Number"
