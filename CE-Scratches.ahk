@@ -10,10 +10,12 @@
 ;Compile Options
 ;~~~~~~~~~~~~~~~~~~~~~
 StartUp()
-Version_Name = Alpha v0.8.3
+Version_Name = v0.9
 
 ;Dependencies
-;None
+#Include %A_ScriptDir%\Functions
+#Include json_obj
+
 
 ;/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\
 ;PREP AND STARTUP
@@ -22,6 +24,8 @@ Version_Name = Alpha v0.8.3
 HardCodedGlobals()
 ;###Invoke and set Global Variables
 StartInternalGlobals()
+
+
 
 ;~~~~~~~~~~~~~~~~~~~~~
 ;GUI
@@ -40,6 +44,8 @@ DiableAllButtons()
 ;Clear the GUI Listview (Contains all found Coupled Entries)
 LV_Delete()
 
+;Import Existing Seen Horses DB File
+Fn_ImportDBData()
 
 ;Switch comment here for live or testing
 ;Download XML of all TB Track Changes
@@ -119,14 +125,12 @@ WriteTBtoExcel()
 ReadExceltoListview()
 
 
-;### Show number of effected Races so user knows if there is a new change.
-Gui, Tab, Scratches
-Gui, Add, Text, x390 y45, Entries Effected: %EffectedEntries%
-
-
 ;Modify Race Column to fit whole title (4th column, 40 pixels/units)
 LV_ModifyCol(4, 40)
 
+;### Show number of effected Races so user knows if there is a new change.
+Gui, Tab, Scratches
+guicontrol, Text, GUI_EffectedEntries, % "Effected Entries: " . EffectedEntries
 
 ;###Close Excel Database
 ;http://msdn.microsoft.com/en-us/library/aa215515
@@ -136,6 +140,11 @@ path = %A_ScriptDir%\data\archive\%CurrentYear%\%CurrentMonth%\%CurrentDay%\TB_%
 oExcel.ActiveWorkbook.SaveAs(path) ;disable for testing on XP
 oExcel.ActiveWorkbook.saved := true
 oExcel.Quit
+
+;Export Array as a JSON file
+Fn_ExportArray()
+
+
 EnableAllButtons()
 Return
 
@@ -201,6 +210,8 @@ RaceNumber = 0
 ;Ignore any entry over this number, example: don't look for Entry 9 or 9A. An attempt to make program run faster. Should be set to 4 or 5 at some point
 Ignored_CE = 9
 
+SeenHorses_Array := {HorseName:"", ScratchStatus:""}
+SeenHorses_ArraX := 0
 return
 }
 
@@ -466,16 +477,26 @@ ReadArrayToListView()
 global
 
 	x = 0
-	Loop %ArrX%, ;Uh ok this needs to be changed to MaxIndex(Array) not some dumb variable
+	Loop % CE_Arr.MaxIndex()
 	{
 	x += 1
-	
+	This_HorseName := CE_Arr[x,3]
+		Loop % SeenHorses_Array.MaxIndex()
+		{
+			;mSGBOX % SeenHorses_Array[A_Index,"HorseName"] . "      " . This_HorseName
+			If (SeenHorses_Array[A_Index,"HorseName"] = This_HorseName)
+			{
+			;End this function if horsename is in the list of seen horses
+			Return
+			}
+		}
+		
 	;DEPRECIATED - Just write out the Array without assigning values to buffer variables. This is left as a note for what each array value holds
 	;Buffer_Number := CE_Arr[x,1]
 	;Buffer_Name := CE_Arr[x,2]
 	;Buffer_Status := CE_Arr[x,3]
 	;Buffer_Race := CE_Arr[x,4]
-		
+	
 	;Found Coupled Entries are stored into this Array, write them out to the GUI Listview
 	LV_Add("", CE_Arr[x,1], CE_Arr[x,2], CE_Arr[x,3], CE_Arr[x,4])
 	LV_ModifyCol()
@@ -699,6 +720,34 @@ FileDelete, %A_ScriptDir%\data\archive\%CurrentYear%\%CurrentMonth%\%CurrentDay%
 }
 
 
+;Imports Existing Seen Horses DB File
+Fn_ImportDBData()
+{
+global
+FormatTime, A_Today, , yyyyMMdd
+FileRead, MemoryFile, \\tvgops\pdxshares\wagerops\Tools\Scratch-Detector\data\archive\DBs\%A_Today%_%Version_Name%DB.json
+SeenHorses_Array := Fn_JSONtooOBJ(MemoryFile)
+MemoryFile := ;Blank
+}
+
+
+;Export Array as a JSON file
+Fn_ExportArray()
+{
+global
+MemoryFile := Fn_JSONfromOBJ(SeenHorses_Array)
+FileDelete, \\tvgops\pdxshares\wagerops\Tools\Scratch-Detector\data\archive\DBs\%A_Today%_%Version_Name%DB.json
+FileAppend, %MemoryFile%, \\tvgops\pdxshares\wagerops\Tools\Scratch-Detector\data\archive\DBs\%A_Today%_%Version_Name%DB.json
+MemoryFile := ;Blank
+}
+
+
+Fn_DeleteDB()
+{
+global
+FileDelete, \\tvgops\pdxshares\wagerops\Tools\Scratch-Detector\data\archive\DBs\%A_Today%_%Version_Name%DB.json
+}
+
 
 DownloadAllHarnessTracks()
 {
@@ -810,7 +859,6 @@ Buffer_Status := 0
 HorseCounter := 0
 TotalTXTLines := 0
 TotalWrittentoExcel := 0
-A_LF := "`n"
 ;SetTimer, ProgressBarTimer, 250
 }
 
@@ -850,9 +898,11 @@ Gui, Tab, Scratches
 Gui, Add, Button, x2 y30 w100 h30 gUpdateButton, Update
 Gui, Add, Button, x102 y30 w100 h30 gCheckHarness, Check Harness Tracks
 Gui, Add, Button, x202 y30 w100 h30 gShiftNotes, Open Shift Notes
-Gui, Add, ListView, x2 y70 w490 h556 Grid NoSortHdr, #|Status|Name|Race
+Gui, Add, Button, x302 y30 w50 h30 gResetDB, Reset DB
+Gui, Add, Text, x360 y40 w200 vGUI_EffectedEntries, Effected Entries:
+Gui, Add, ListView, x2 y70 w490 h556 Grid NoSortHdr gDoubleClick, #|Status|Name|Race
 Gui, Add, Progress, x2 y60 w100 h10 vUpdateProgress, 1
-Gui, Add, Text, x430 y3, %Version_Name%
+Gui, Add, Text, x462 y3 +Right, %Version_Name%
 Gui, Tab, Options
 ;Gui, Add, ListView, x2 y70 w490 h580 Grid Checked, #|Status|Name|Race
 
@@ -860,13 +910,22 @@ Gui, Show, x130 y90 h622 w490, Scratch Detector
 Return
 }
 
-MyListView:
-if A_GuiEvent = DoubleClick
+DoubleClick:
+If A_GuiEvent = DoubleClick
 {
-    LV_GetText(RowText, A_EventInfo)  ; Get the text from the row's first field.
-    Msgbox, You double-clicked row number %A_EventInfo%. Text: "%RowText%"
+    LV_GetText(RowText, A_EventInfo, 3)  ; Get the text from the row's first field.
+    ;Msgbox, You double-clicked row number %A_EventInfo%. Text: "%RowText%"
+	X2 := SeenHorses_Array.MaxIndex()
+	X2 += 1
+	SeenHorses_Array[X2,"HorseName"] := RowText
+	Fn_ExportArray()
 }
-return
+Return
+
+
+ResetDB:
+Fn_DeleteDB()
+Return
 
 
 DiableAllButtons()
