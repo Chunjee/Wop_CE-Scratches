@@ -913,6 +913,9 @@ Return
 DoubleClick:
 If A_GuiEvent = DoubleClick
 {
+;Load any existing DB from other Ops
+Fn_ImportDBData()
+
     LV_GetText(RowText, A_EventInfo, 3)  ; Get the text from the row's first field.
     ;Msgbox, You double-clicked row number %A_EventInfo%. Text: "%RowText%"
 	X2 := SeenHorses_Array.MaxIndex()
