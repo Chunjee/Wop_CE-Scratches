@@ -284,18 +284,6 @@ ReRead = 0
 			}
 		}
 		
-		;This is where I am working on reporting RE-LIVENED RUNNERS
-		;If Marked as livened, send cause I say so
-		If InStr(Status, "UN")
-		{
-		Msgbox, %Number% "%Name%" in Race %Race% of has been Re-Livened
-		;LV_AddTrack()
-		;LV_AddRace()
-		;LV_Add("", TRACK, , , )
-		;LV_Add("", RE-LIVENED, %Name%, %Race% )
-		;Continue
-		}
-		
 		
 		
 		;FIRST HORSE GOING INTO ARRAY~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -460,7 +448,8 @@ CE_FirstFound += 1
 	LV_AddTrack()
 	CE_FoundRace = %Race%
 	}
-			
+	
+
 	;This helps determine if a new RACE LV needs to be added in the case of a 2nd CE program number
 	If (CE_FoundRace != %Race%)
 	{
@@ -476,8 +465,20 @@ ReadArrayToListView()
 ReadArrayToListView()
 {
 global
-
+		
 	x = 0
+	
+	;First just tell user if there are any relivended horses
+	Loop % CE_Arr.MaxIndex()
+	{
+		If Instr(CE_Arr[A_Index,2],"UN")
+		{
+		Msgbox % CE_Arr[A_Index,1] . " " . CE_Arr[A_Index,3] . " in Race " . CE_Arr[A_Index,4] . " of " . Buffer_TrackName . " has been Re-livened!"
+		}
+	}
+	
+	
+	
 	Loop % CE_Arr.MaxIndex()
 	{
 	x += 1
@@ -504,7 +505,6 @@ global
 	}
 
 }
-
 
 
 ScratchCheck()
@@ -718,7 +718,7 @@ FormatTime, CurrentMonth,, MMMM
 FormatTime, CurrentDay,, dd
 
 FileCreateDir, %A_ScriptDir%\data\archive\%CurrentYear%\%CurrentMonth%\%CurrentDay%\
-FileDelete, %A_ScriptDir%\data\archive\%CurrentYear%\%CurrentMonth%\%CurrentDay%\TB_%CurrentDate%.xlsx
+FileDelete, \\tvgops\pdxshares\wagerops\Tools\Scratch-Detector\\data\archive\%CurrentYear%\%CurrentMonth%\%CurrentDay%\TB_%CurrentDate%.xlsx
 }
 
 
