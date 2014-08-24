@@ -10,7 +10,7 @@
 ;Compile Options
 ;~~~~~~~~~~~~~~~~~~~~~
 StartUp()
-Version_Name = v0.9
+Version_Name = v0.10
 
 ;Dependencies
 #Include %A_ScriptDir%\Functions
@@ -136,7 +136,7 @@ guicontrol, Text, GUI_EffectedEntries, % "Effected Entries: " . EffectedEntries
 ;http://msdn.microsoft.com/en-us/library/aa215515
 oExcel.ActiveWorkbook.saved := true
 CreateArchiveDir() ;this function just makes the archive directory
-path = %A_ScriptDir%\data\archive\%CurrentYear%\%CurrentMonth%\%CurrentDay%\TB_%CurrentDate%
+path = \\tvgops\pdxshares\wagerops\Tools\Scratch-Detector\data\archive\%CurrentYear%\%CurrentMonth%\%CurrentDay%\TB_%CurrentDate%
 oExcel.ActiveWorkbook.SaveAs(path) ;disable for testing on XP
 oExcel.ActiveWorkbook.saved := true
 oExcel.Quit
@@ -158,7 +158,7 @@ CheckHarness:
 DiableAllButtons()
 LV_Delete()
 StartInternalGlobals()
-FileDelete, %A_ScriptDir%\data\archive\%CurrentYear%\%CurrentMonth%\%CurrentDay%\HN_%CurrentDate%.xlsx
+FileDelete, \\tvgops\pdxshares\wagerops\Tools\Scratch-Detector\data\archive\%CurrentYear%\%CurrentMonth%\%CurrentDay%\HN_%CurrentDate%.xlsx
 DownloadAllHarnessTracks()
 oExcel := ComObjCreate("Excel.Application") ; create Excel Application object
 oExcel.Workbooks.Add ; create a new workbook (oWorkbook := oExcel.Workbooks.Add)
@@ -281,19 +281,20 @@ ReRead = 0
 			Blank_Counter = 0
 			;FirstHorse_Toggle = 1
 			Continue
-			}	
+			}
 		}
 		
 		;This is where I am working on reporting RE-LIVENED RUNNERS
 		;If Marked as livened, send cause I say so
-		;If (Status = "UNSCRATCH")
-		;{
+		If InStr(Status, "UN")
+		{
+		Msgbox, %Number% "%Name%" in Race %Race% of has been Re-Livened
 		;LV_AddTrack()
 		;LV_AddRace()
 		;LV_Add("", TRACK, , , )
 		;LV_Add("", RE-LIVENED, %Name%, %Race% )
 		;Continue
-		;}
+		}
 		
 		
 		
@@ -701,6 +702,7 @@ global
 
 FileDelete, %A_ScriptDir%\data\temp\ConvertedXML.txt
 FileSelectFile, XMLPath
+FileCreateDir, %A_ScriptDir%\data\temp\
 FileCopy, %XMLPath%, %A_ScriptDir%\data\temp\XML.txt, 1
 }
 
