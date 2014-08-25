@@ -126,6 +126,7 @@ ReadExceltoListview()
 
 
 ;Modify Race Column to fit whole title (4th column, 40 pixels/units)
+LV_ModifyCol(3)
 LV_ModifyCol(4, 40)
 
 ;### Show number of effected Races so user knows if there is a new change.
