@@ -1,8 +1,10 @@
 #################
-## Chunjee
+## Project Specific
 #################
 Data/
 *test*
+extra_temp/
+*DB.json*
 
 
 

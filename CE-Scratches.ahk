@@ -10,7 +10,7 @@
 ;Compile Options
 ;~~~~~~~~~~~~~~~~~~~~~
 StartUp()
-Version_Name = v0.9
+Version_Name = v0.11
 
 ;Dependencies
 #Include %A_ScriptDir%\Functions
@@ -28,9 +28,9 @@ Sb_GlobalNameSpace()
 ;###Invoke and set Global Variables
 StartInternalGlobals()
 
-FileRead, MemoryFile, %A_ScriptDir%\DB.json
-AllHorses_Array := Fn_JSONtooOBJ(MemoryFile)
-MemoryFile := ;Blank
+;FileRead, MemoryFile, %A_ScriptDir%\DB.json
+;AllHorses_Array := Fn_JSONtooOBJ(MemoryFile)
+;MemoryFile := ;Blank
 
 
 ;~~~~~~~~~~~~~~~~~~~~~
@@ -53,44 +53,25 @@ LV_Delete()
 
 ;Switch comment here for live or testing
 ;Download XML of all TB Track Changes
-;GetNewXML()
-UseExistingXML()
+GetNewXML("Today_XML.xml")
+;UseExistingXML()
 
 
 ;###Invoke and set Global Variables
 StartInternalGlobals()
 
 ;###Read XML previously downloaded to FILECONTENTS Var
-FileRead, FileContents, %A_ScriptDir%\data\temp\XML.txt
-
-;###Clean XML so that is can be read one line at a time
-ReturnReplace("race_number")
-ReturnReplace("race_changes")
-ReturnReplace("track_name")
-ReturnReplace("Coupled Type")
-ReturnReplace("program_number")
-ReturnReplace("horse_name")
-ReturnReplace("Scratched")
-ReturnReplace("new_value")
-ReturnReplace("/old_value")
-ReturnReplace("<change>")
-JustReplace("</change_description><old_value>"," ")
-
-	FileAppend,
-	(
-	%FileContents%
-	), %A_ScriptDir%\data\temp\ConvertedXML.txt
+FileRead, File_TB_XML, %A_ScriptDir%\data\temp\Today_XML.xml
+StringReplace, File_TB_XML, File_TB_XML, `<,`n`<, All
+FileAppend, %File_TB_XML%, %A_ScriptDir%\data\temp\ConvertedXML.txt
 FileContents = ;Free the memory after being written to file.
+
 
 	;###This does nothing but count the number of lines to be used in progress bar calculations
 	Loop, read, %A_ScriptDir%\data\temp\ConvertedXML.txt
 	{
 	TotalTXTLines += 1
 	}
-	
-	
-	
-	ArraX := AllHorses_Array.MaxIndex()
 	
 	;###Read Each line of Converted XML. Valued Information is extracted put into an array
 	;THIS NEEDS TO BE RE-WRITTEN USING REGULAR EXPRESSIONS
@@ -99,11 +80,10 @@ FileContents = ;Free the memory after being written to file.
 	
 	ReadLine := A_LoopReadLine
 	
-		REG = horse_name="(.*)"
+		REG = horse_name="(.*)"\s
 		RegexMatch(ReadLine, REG, RE_HorseName)
 		If (RE_HorseName1 != "")
 		{
-		ArraX += 1
 		Fn_InsertHorseData()
 		The_HorseName := RE_HorseName1
 		}
@@ -122,7 +102,7 @@ FileContents = ;Free the memory after being written to file.
 		The_RaceNumber := RE_RaceNumber1
 		}
 		
-		REG = program_number="(.*)">
+		REG = \sprogram_number="(.*)">
 		RegexMatch(ReadLine, REG, RE_ProgramNumber)
 		If (RE_ProgramNumber1 != "")
 		{
@@ -131,27 +111,27 @@ FileContents = ;Free the memory after being written to file.
 		The_EntryNumber := The_RaceNumber * 1000 + The_EntryNumber
 		}
 		
-		REG = Scratched N
-		RegexMatch(ReadLine, "Scratched (N)", RE_Scratch)
+		REG = <new_value>(Y)
+		RegexMatch(ReadLine, REG, RE_Scratch)
 		If (RE_Scratch1 != "")
 		{
 		The_ScratchStatus := 1
 		;Fn_InsertHorseData()
 		}
 		
-		REG = new_value>N<
-		RegexMatch(ReadLine, "new_value>(N)<", RE_Scratch)
+		REG = <new_value>(N)
+		RegexMatch(ReadLine, REG, RE_Scratch)
 		If (RE_Scratch1 != "")
 		{
 		The_ScratchStatus := 0
 		;Fn_InsertHorseData()
 		}
 		
-		RegexMatch(ReadLine, "Coupled (Type)", RE_Scratch)
-		If (RE_Scratch1 != "")
-		{
-		The_ScratchStatus := ""
-		}
+		;RegexMatch(ReadLine, "Coupled (Type)", RE_Scratch)
+		;If (RE_Scratch1 != "")
+		;{
+		;The_ScratchStatus := ""
+		;}
 		
 		
 	;CleanXML("Coupled Type","COUPLED",44,1)
@@ -170,24 +150,11 @@ FileContents = ;Free the memory after being written to file.
 ;AllHorses_Array := {TrackName:"", HorseName:"", ProgramNumber:"", EntryNumber:"", RaceNumber:"", Scratched:"" , Seen:""}
 
 
-	
+
 ;Fn_Sort2DArray(AllHorses_Array, "EntryNumber")
 	;Fn_Sort2DArray(AllHorses_Array, "ProgramNumber")
 ;Fn_Sort2DArray(AllHorses_Array, "RaceNumber")
 ;Fn_Sort2DArray(AllHorses_Array, "TrackName")
-
-
-
-	
-	
-
-
-
-
-
-	
-
-
 
 
 
@@ -209,8 +176,8 @@ ReadtoListview()
 
 
 ;### Show number of effected Races so user knows if there is a new change.
-Gui, Tab, Scratches
-Gui, Add, Text, x390 y45, Entries Effected: %EffectedEntries%
+;Gui, Tab, Scratches
+guicontrol, Text, GUI_EffectedEntries, % "Effected Entries: " . EffectedEntries
 
 
 ;Modify Race Column to fit whole title (4th column, 40 pixels/units)
@@ -226,6 +193,10 @@ FileAppend, %MemoryFile%, %A_ScriptDir%\DB.json
 MemoryFile := ;Blank
 Return
 
+
+F3::
+Array_Gui(AllHorses_Array)
+Return
 
 ;~~~~~~~~~~~~~~~~~~~~~
 ;Check Harness Tracks
@@ -291,7 +262,7 @@ RaceNumber = 0
 CE_Arr := [[x],[y]]
 ArrX = 0
 
-AllHorses_Array := {TrackName:"", HorseName:"", ProgramNumber:"", EntryNumber:"", RaceNumber:"", Scratched:"" , Seen:""}
+AllHorses_Array := []
 Ignored_CE = 4
 Return
 }
@@ -303,30 +274,31 @@ global
 ;The_HorseNameLength := StrLen(The_HorseName)
 
 	X := AllHorses_Array.MaxIndex() 
-	Loop % X
-	{
-		If (The_HorseName = AllHorses_Array[A_Index, "HorseName"] || The_HorseName = "") ; && The_ScratchStatus != 0
-		{
-		;X := A_Index
-		;Horse already exists in this object, skip
-		Return
-		}
-	}
+	;Loop % X
+	;{
+	;	If (The_HorseName = AllHorses_Array[A_Index, "HorseName"] || The_HorseName = "") ; && The_ScratchStatus != 0
+	;	{
+	;	;X := A_Index
+	;	;Horse already exists in this object, skip
+	;	Return
+	;	}
+	;}
 	
 	If(The_HorseName != "")
 	{
 	X += 1
+	AllHorses_Array[X,"EntryNumber"] := The_EntryNumber ;Index
 	AllHorses_Array[X,"TrackName"] := The_TrackName
 	AllHorses_Array[X,"HorseName"] := The_HorseName
 	AllHorses_Array[X,"ProgramNumber"] := The_ProgramNumber
-	AllHorses_Array[X,"EntryNumber"] := The_EntryNumber
 	AllHorses_Array[X,"RaceNumber"] := The_RaceNumber
 	AllHorses_Array[X,"Scratched"] := The_ScratchStatus
 	}
+	The_ScratchStatus := 0
 }
 
 
-ReadtoListview()
+Fn_ReadtoListview()
 {
 global
 
@@ -634,101 +606,6 @@ LV_Add("", "", "", Buffer_RaceLV, "")
 }
 
 
-;This needs an overhaul after converting to Regular Expressions, also needs to be structured as more flexible parameter function
-WriteTBtoExcel()
-{
-global
-
-	If Linetarget = TN
-	{
-	TrackCounter += 1
-	oExcel.Worksheets.Add
-	TrackCounter2 := "T" . TrackCounter
-	oExcel.ActiveSheet.Name := TrackCounter2
-	ExcelPointerX = 1
-	oExcel.Range("A" . ExcelPointerX).Value := Stringy
-	oExcel.Range("G" . ExcelPointerX).Value := TrackCounter
-	ExcelPointerX +=1
-	}
-	if Linetarget = RN
-	{
-	RaceNumber = %Stringy%
-	}
-	if Linetarget = PN ;&& Stringy <= %InterestNumber_Limit%  ;Another good place to reduce runtime by skipping Ignored_CE excel writing
-	{
-	oExcel.Range("A" . ExcelPointerX).Value := Stringy
-		If InStr(Stringy, "A") || InStr(Stringy, "B") || InStr(Stringy, "C") || InStr(Stringy, "X")
-		{
-		oExcel.Range("A" . ExcelPointerX . ":" . "E" . (ExcelPointerX - 1)).Interior.ColorIndex := 3 ; fill range of cell color number 3
-		}
-	}
-	if Linetarget = HN
-	{
-	ExcelPointerX += 1
-	HorseCounter += 1
-	oExcel.Range("B" . ExcelPointerX).Value := Stringy
-	oExcel.Range("H" . ExcelPointerX).Value := RaceNumber
-	}
-	if Linetarget = SC
-	{
-	oExcel.Range("E" . ExcelPointerX).Value := "Scratched"
-	}
-	if Linetarget = UNSCRATCH
-	{
-	oExcel.Range("E" . ExcelPointerX).Value := "UNSCRATCHED"
-	}
-
-}
-
-;Same Story here, looks more like a subroutine then a function, make this a priority
-WriteHNtoExcel()
-{
-global
-
-	If Linetarget = TN
-	{
-	TrackCounter += 1
-	oExcel.Worksheets.Add
-	TrackCounter2 := "T" . TrackCounter
-	oExcel.ActiveSheet.Name := TrackCounter2
-	ExcelPointerX = 1
-	oExcel.Range("A" . ExcelPointerX).Value := Stringy
-	oExcel.Range("G" . ExcelPointerX).Value := TrackCounter
-	ExcelPointerX +=1
-	}
-	if Linetarget = RN
-	{
-	RaceNumber = %Stringy%
-	}
-	if Linetarget = PN ;&& Stringy <= %InterestNumber_Limit%
-	{
-	ExcelPointerX += 1
-	oExcel.Range("A" . ExcelPointerX).Value := Stringy
-		;IfInString, Stringy, A ;|| IfInString, Stringy, B || IfInString, Stringy, C || IfInString, Stringy, X
-		If InStr(Stringy, "A") || InStr(Stringy, "B") || InStr(Stringy, "C") || InStr(Stringy, "X")
-		{
-		oExcel.Range("A" . ExcelPointerX . ":" . "E" . (ExcelPointerX - 1)).Interior.ColorIndex := 3 ; fill range of cell color number 3
-		}
-	}
-	if Linetarget = HN
-	{
-	HorseCounter += 1
-	oExcel.Range("B" . ExcelPointerX).Value := Stringy
-	oExcel.Range("H" . ExcelPointerX).Value := RaceNumber
-	}
-	if Linetarget = SC
-	{
-	oExcel.Range("E" . ExcelPointerX).Value := Stringy
-	}
-	if Linetarget = COUPLED
-	{
-	oExcel.Range("F" . ExcelPointerX).Value := Stringy
-	}
-	Stringy = ;Empty Variable
-	Linetarget = ;Empty Variable
-}
-
-
 ;This function exists only becuase I didn't know how to use Regular Expressions. Should be depreciated asap
 CleanXML(TargetWord,Label,TrimLeft,TrimRight)
 {
@@ -773,17 +650,17 @@ StringReplace, FileContents, FileContents, %Word%,`n%Word%, All
 
 
 
-GetNewXML()
+GetNewXML(para_FileName)
 {
 global
 
-FileRemoveDir, %A_ScriptDir%\data\temp , 1
+FileRemoveDir, %A_ScriptDir%\data\temp, 1
 FileCreateDir, %A_ScriptDir%\data\temp
 FileCreateDir, %A_ScriptDir%\data\temp\tracksrawhtml
 FileDelete, %A_ScriptDir%\data\temp\ConvertedXML.txt
-UrlDownloadToFile, http://www.equibase.com/premium/eqbLateChangeXMLDownload.cfm, %A_ScriptDir%\data\temp\XML.txt
+UrlDownloadToFile, http://www.equibase.com/premium/eqbLateChangeXMLDownload.cfm, %A_ScriptDir%\data\temp\%para_FileName%
 ;Copy to Archive
-FileCopy %A_ScriptDir%\data\temp\XML.txt, %A_ScriptDir%\data\archive\%CurrentYear%\%CurrentMonth%\%CurrentDay%\XML_%CurrentDate%.txt, 1
+FileCopy %A_ScriptDir%\data\temp\%para_FileName%, %A_ScriptDir%\data\archive\%CurrentYear%\%CurrentMonth%\%CurrentDay%\EquibaseXML_%CurrentDate%.xml, 1
 }
 
 UseExistingXML()
@@ -792,7 +669,7 @@ global
 
 FileDelete, %A_ScriptDir%\data\temp\ConvertedXML.txt
 FileSelectFile, XMLPath
-FileCopy, %XMLPath%, %A_ScriptDir%\data\temp\XML.txt, 1
+FileCopy, %XMLPath%, %A_ScriptDir%\data\temp\EquibaseXML.xml, 1
 }
 
 
@@ -807,7 +684,6 @@ FormatTime, CurrentMonth,, MMMM
 FormatTime, CurrentDay,, dd
 
 FileCreateDir, %A_ScriptDir%\data\archive\%CurrentYear%\%CurrentMonth%\%CurrentDay%\
-FileDelete, %A_ScriptDir%\data\archive\%CurrentYear%\%CurrentMonth%\%CurrentDay%\TB_%CurrentDate%.xlsx
 }
 
 
@@ -834,8 +710,7 @@ UrlDownloadToFile, http://tote.racingchannel.com/MEN----H.PHP, %A_ScriptDir%\dat
 		FileRead, FileContents, %A_ScriptDir%\data\temp\tracksrawhtml\%TrackCode%.txt
 
 		;###Clean quotes out of HTML so that is can be read more accurately.
-		StringReplace, FileContents, FileContents,",+, All
-		;";Comment
+		StringReplace, FileContents, FileContents,",+, All ;"
 		
 		FileAppend,
 		(
@@ -988,14 +863,15 @@ BuildGUI()
 Global
 
 Gui, Add, Tab, x2 y0 w630 h700 , Scratches|Options
-Gui, Tab, Scratches
+;Gui, Tab, Scratches
 Gui, Add, Button, x2 y30 w100 h30 gUpdateButton, Update
 Gui, Add, Button, x102 y30 w100 h30 gCheckHarness, Check Harness Tracks
 Gui, Add, Button, x202 y30 w100 h30 gShiftNotes, Open Shift Notes
+Gui, Add, Text, x390 y40 w200 vGUI_EffectedEntries, Effected Entries:
 Gui, Add, ListView, x2 y70 w490 h556 Grid NoSortHdr, #|Status|Name|Race
 Gui, Add, Progress, x2 y60 w100 h10 vUpdateProgress, 1
-Gui, Add, Text, x430 y3, %Version_Name%
-Gui, Tab, Options
+Gui, Add, Text, x460 y3 +Right, %Version_Name%
+;Gui, Tab, Options
 ;Gui, Add, ListView, x2 y70 w490 h580 Grid Checked, #|Status|Name|Race
 
 Gui, Show, x130 y90 h622 w490, Scratch Detector
