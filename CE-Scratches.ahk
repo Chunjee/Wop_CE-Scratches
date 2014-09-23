@@ -87,7 +87,6 @@ FileContents = ;Free the memory after being written to file.
 		RegexMatch(ReadLine, REG, RE_HorseName)
 		If (RE_HorseName1 != "")
 		{
-		Fn_InsertHorseData()
 		The_HorseName := RE_HorseName1
 		}
 		
@@ -119,17 +118,23 @@ FileContents = ;Free the memory after being written to file.
 		If (RE_Scratch1 != "")
 		{
 		The_ScratchStatus := 1
-		;Fn_InsertHorseData()
 		}
 		
 		REG = <new_value>(N)
 		RegexMatch(ReadLine, REG, RE_Scratch)
 		If (RE_Scratch1 != "")
-		{
-		The_ScratchStatus := 0
-		;Fn_InsertHorseData()
+		{ ;In this case changing to a new_value of 'No' would mean the runner has been livened
+		The_ScratchStatus := 9
 		}
 		
+		REG = (<\/horse>)
+		RegexMatch(ReadLine, REG, RE_Change)
+		If (RE_Change1 != "")
+		{
+		Fn_InsertHorseData()
+		The_HorseName := ""
+		The_ScratchStatus := 0
+		}
 		;RegexMatch(ReadLine, "Coupled (Type)", RE_Scratch)
 		;If (RE_Scratch1 != "")
 		;{
@@ -167,13 +172,14 @@ Alf := Fn_QuickRegEx(A_LoopReadLine,REG)
 	}
 }
 
-
+X := 0
 RacingChannel_Array := []
 ;Read each RacingChannel file
 Loop, %A_ScriptDir%\data\temp\RacingChannel\TBred\*.PHP
 {
 	Loop, Read, %A_LoopFileFullPath%
 	{
+	;Msgbox, %A_LoopReadLine%
 	;TrackName
 	RegExFound := Fn_QuickRegEx(A_LoopReadLine,"<TITLE>(\D+)<\/TITLE>")
 		If (RegExFound != "null")
@@ -208,21 +214,32 @@ Loop, %A_ScriptDir%\data\temp\RacingChannel\TBred\*.PHP
 		HorseStatus := 1
 		}
 	;Write Out
-	REG = <TD></TD>
+	REG = (<TD><\/TD>)
 	RegExFound := Fn_QuickRegEx(A_LoopReadLine,REG)
-		If (RegExFound != "null" && HorseName != "")
+		If (RegExFound != "null" && HorseName != "" && HorseStatus = 1)
 		{
-		RacingChannel_Array[A_Index,"TrackName"] := TrackName
-		RacingChannel_Array[A_Index,"RaceNumber"] := RaceNumber
-		RacingChannel_Array[A_Index,"ProgramNumber"] := ProgramNumber
-		RacingChannel_Array[A_Index,"HorseName"] := HorseName
-		RacingChannel_Array[A_Index,"Status"] := HorseStatus
+		X += 1
+		RacingChannel_Array[X,"TrackName"] := TrackName
+		RacingChannel_Array[X,"RaceNumber"] := RaceNumber
+		RacingChannel_Array[X,"ProgramNumber"] := ProgramNumber
+		RacingChannel_Array[X,"HorseName"] := HorseName
+		RacingChannel_Array[X,"Status"] := HorseStatus
+			Loop, % AllHorses_Array.MaxIndex()
+			{
+				If (AllHorses_Array[A_Index,"HorseName"] = RacingChannel_Array[X,"HorseName"])
+				{
+				AllHorses_Array[A_Index,"RCConfirm"] := "/"
+				}
+				;Else ;switch back to this if a binary system is needed
+				;{
+				;AllHorses_Array[A_Index,"RCConfirm"] := 0
+				;}
+			}
 		}
 
 	}
 
 }
-;Array_Gui(RacingChannel_Array)
 
 
 
@@ -261,12 +278,6 @@ LV_ModifyCol(4, 40)
 
 
 EnableAllButtons()
-
-
-MemoryFile := Fn_JSONfromOBJ(AllHorses_Array)
-FileDelete, %A_ScriptDir%\DB.json
-FileAppend, %MemoryFile%, %A_ScriptDir%\DB.json
-MemoryFile := ;Blank
 Return
 
 
@@ -395,6 +406,8 @@ global
 
 Fn_WriteOutCE(Obj)
 {
+global SeenHorses_Array
+
 ScratchCheck := 0
 	Loop, % Obj.MaxIndex()
 	{
@@ -407,22 +420,28 @@ ScratchCheck := 0
 	{
 		Loop, % Obj.MaxIndex()
 		{
+		CurrentHorse := Obj[A_Index,"HorseName"]
+			If(Obj[A_Index,"Scratched"] = 0)
+			{
+			Status := ""
+			}
 			If(Obj[A_Index,"Scratched"] = 1)
 			{
 			Status := "Scratched"
 			}
-			If(Obj[A_Index,"Scratched"] = 3)
+			If(Obj[A_Index,"Scratched"] = 9)
 			{
 			Status := "RE-LIVENED"
 			}
 				Loop, % SeenHorses_Array.MaxIndex()
 				{
-					If (SeenHorses_Array[A_Index,"HorseName"] = Obj[A_Index,"HorseName"] && Obj[A_Index,"Scratched"] != 3)
+					If (SeenHorses_Array[A_Index,"HorseName"] = CurrentHorse && Obj[A_Index,"Scratched"] != 9)
 					{
-					Continue
+					Continue 2
 					}
 				}
-		LV_Add("",Obj[A_Index,"ProgramNumber"],Status,Obj[A_Index,"HorseName"],Obj[A_Index,"RaceNumber"])
+			Msgbox, % Obj[A_Index,"ConfirmScratch"]
+		LV_Add("",Obj[A_Index,"ProgramNumber"],Status,Obj[A_Index,"ConfirmScratch"],Obj[A_Index,"HorseName"],Obj[A_Index,"RaceNumber"])
 		LV_ModifyCol(1)
 		LV_ModifyCol(2)
 		LV_ModifyCol(3)
@@ -447,8 +466,8 @@ Max_Horses := Obj.MaxIndex()
 	Loop, % Obj.MaxIndex()
 	{
 	ReRead:
-		If (Obj[A_Index,"RaceNumber"] > 20)
-		{
+		If (Obj[A_Index,"ProgramNumber"] > 9)
+		{ ;WARNING - This will cause issues it there is ever a 9A, 10X, etc
 		Continue
 		}
 		
@@ -465,6 +484,7 @@ Max_Horses := Obj.MaxIndex()
 		CE_Array[ArrX,"Scratched"] := Obj[A_Index,"Scratched"]
 		CE_Array[ArrX,"ProgramNumber"] := Obj[A_Index,"ProgramNumber"]
 		CE_Array[ArrX,"RaceNumber"] := Obj[A_Index,"RaceNumber"]
+		CE_Array[ArrX,"ConfirmScratch"] := Obj[A_Index,"RCConfirm"]
 		FirstHorse_Toggle := 0
 		Continue
 		}
@@ -476,8 +496,7 @@ Max_Horses := Obj.MaxIndex()
 		CE_Array[ArrX,"Scratched"] := Obj[A_Index,"Scratched"]
 		CE_Array[ArrX,"ProgramNumber"] := Obj[A_Index,"ProgramNumber"]
 		CE_Array[ArrX,"RaceNumber"] := Obj[A_Index,"RaceNumber"]
-		;Array_Gui(CE_Array)
-		Msgbox, % CE_Array[ArrX,"HorseName"]
+		CE_Array[ArrX,"ConfirmScratch"] := Obj[A_Index,"RCConfirm"]
 		Continue
 		}
 		
@@ -948,32 +967,6 @@ global
 	
 }
 
-ReadTrackFiles()
-{
-global
-
-Needle = www.equibase.com/profiles/Results
-
-
-	Loop, %A_ScriptDir%\data\temp\tracksrawhtml\*.txt
-	{
-	Filepath = %A_LoopFileFullPath%
-	TrackFile = %A_LoopField%
-	;Msgbox, Loopfield is with txt? %A_LoopField% %A_LoopFileFullPath%
-		Loop, read, %A_LoopFileFullPath%,
-		{
-			IfInString, A_LoopReadLine, %Needle%
-			{
-			;Msgbox, %A_LoopReadLine%
-			StringTrimRight, TrackName, A_LoopReadLine, 32
-			StringTrimLeft, TrackName, TrackName, 119
-			Msgbox, Trackname is %TrackName%
-			}
-		
-		}
-	}
-}
-
 
 Fn_ConvertEntryNumber(para_ProgramNumber)
 {
@@ -988,7 +981,6 @@ Fn_ConvertEntryNumber(para_ProgramNumber)
 	RE_EntryNumber2 := 0
 	}
 RE_EntryNumber := RE_EntryNumber1 * 100 + RE_EntryNumber2
-;Msgbox, %para_ProgramNumber% is now %RE_EntryNumber% : %RE_EntryNumber1%
 Return %RE_EntryNumber%
 ;Return "ERROR Retrieving Entry Number"
 }
@@ -1093,7 +1085,7 @@ Gui, Add, Button, x2 y30 w100 h30 gUpdateButton, Update
 Gui, Add, Button, x102 y30 w100 h30 gCheckHarness, Check Harness Tracks
 Gui, Add, Button, x202 y30 w100 h30 gShiftNotes, Open Shift Notes
 Gui, Add, Text, x390 y40 w200 vGUI_EffectedEntries, Effected Entries:
-Gui, Add, ListView, x2 y70 w490 h556 Grid NoSortHdr gDoubleClick, #|Status|Name|Race
+Gui, Add, ListView, x2 y70 w490 h556 Grid NoSortHdr gDoubleClick, #|Status|RC|Name|Race
 Gui, Add, Progress, x2 y60 w100 h10 vUpdateProgress, 1
 Gui, Add, Text, x460 y3 +Right, %Version_Name%
 ;Gui, Tab, Options
@@ -1101,6 +1093,7 @@ Gui, Add, Text, x460 y3 +Right, %Version_Name%
 
 Gui, Show, x130 y90 h622 w490, Scratch Detector
 Return
+}
 
 DoubleClick:
 	If A_GuiEvent = DoubleClick
@@ -1116,7 +1109,6 @@ DoubleClick:
 		Fn_ExportArray()
 	}
 Return
-}
 
 
 DiableAllButtons()
