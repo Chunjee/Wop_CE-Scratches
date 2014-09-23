@@ -150,6 +150,80 @@ FileContents = ;Free the memory after being written to file.
 ;AllHorses_Array := {TrackName:"", HorseName:"", ProgramNumber:"", EntryNumber:"", RaceNumber:"", Scratched:"" , Seen:""}
 
 
+;Download TBred from RacingChannel
+FileCreateDir, %A_ScriptDir%\data\temp\RacingChannel
+FileCreateDir, %A_ScriptDir%\data\temp\RacingChannel\TBred
+DownloadSpecified("http://tote.racingchannel.com/MEN----T.PHP","RacingChannel\TBred_Index.html")
+Loop, Read, %A_ScriptDir%\data\temp\RacingChannel\TBred_Index.html
+{
+REG = A HREF="(\S+)"><IMG SRC="\/images\/CHG.gif        ;"
+Alf := Fn_QuickRegEx(A_LoopReadLine,REG)
+	If (Alf != "null")
+	{
+	UrlDownloadToFile, https://tote.racingchannel.com/%Alf%, %A_ScriptDir%\data\temp\RacingChannel\TBred\%Alf%
+	}
+}
+
+
+RacingChannel_Array := []
+;Read each RacingChannel file
+Loop, %A_ScriptDir%\data\temp\RacingChannel\TBred\*.PHP
+{
+	Loop, Read, %A_LoopFileFullPath%
+	{
+	;TrackName
+	RegExFound := Fn_QuickRegEx(A_LoopReadLine,"<TITLE>(\D+)<\/TITLE>")
+		If (RegExFound != "null")
+		{
+		TrackName := RegExFound
+		}
+	;RaceNumber
+	RegExFound := Fn_QuickRegEx(A_LoopReadLine,"A name=race(\d+)>")
+		If (RegExFound != "null")
+		{
+		RaceNumber := RegExFound
+		}
+	;ProgramNumber
+	REG = <TD WIDTH="20"><B>(\d+)<
+	RegExFound := Fn_QuickRegEx(A_LoopReadLine,REG)
+		If (RegExFound != "null")
+		{
+		ProgramNumber := RegExFound
+		}
+	;HorseName
+	REG = WIDTH="150"><B>(\D+)<\/B>
+	RegExFound := Fn_QuickRegEx(A_LoopReadLine,REG)
+		If (RegExFound != "null")
+		{
+		HorseName := RegExFound
+		}
+	;Status
+	REG = scratched (\(part of entry\))
+	RegExFound := Fn_QuickRegEx(A_LoopReadLine,REG)
+		If (RegExFound != "null")
+		{
+		HorseStatus := 1
+		}
+	;Write Out
+	REG = <TD></TD>
+	RegExFound := Fn_QuickRegEx(A_LoopReadLine,REG)
+		If (RegExFound != "null" && HorseName != "")
+		{
+		RacingChannel_Array[A_Index,"TrackName"] := TrackName
+		RacingChannel_Array[A_Index,"RaceNumber"] := RaceNumber
+		RacingChannel_Array[A_Index,"ProgramNumber"] := ProgramNumber
+		RacingChannel_Array[A_Index,"HorseName"] := HorseName
+		RacingChannel_Array[A_Index,"Status"] := HorseStatus
+		}
+
+	}
+
+}
+
+Array_Gui(RacingChannel_Array)
+
+
+
 
 ;Fn_Sort2DArray(AllHorses_Array, "EntryNumber")
 	;Fn_Sort2DArray(AllHorses_Array, "ProgramNumber")
@@ -171,7 +245,7 @@ FileContents = ;Free the memory after being written to file.
 
 
 ;### Look through Excel and send scratched CE to Listview for User to see
-ReadtoListview()
+Fn_ReadtoListview()
 
 
 
@@ -227,7 +301,6 @@ oExcel.Visible := false ; make Excel Application invisible
 		CleanXML("<TD WIDTH=+20+><B>","PN",19,9)
 		CleanXML("<TD ALIGN=+LEFT+ WIDTH=+150+><B>","HN",33,9)
 		CleanXML("<TD ALIGN=+LEFT+ WIDTH=+250+>","SC",39,5)
-		WriteHNtoExcel()
 		}
 	}
 
@@ -255,8 +328,8 @@ Sb_GlobalNameSpace()
 {
 global
 
-RaceNumber = 0
-;Ignore any entry over this number, example: don't look for Entry 9 or 9A. An attempt to make program run faster. Should be set to 4 or 5 at some point
+The_IgnoredProgramNumber = 0
+;Ignore any entry over this number, example: don't look for Entry 9 or 9A. An experiment at running faster. Should be uneeded now that they are stored in an array
 
 
 CE_Arr := [[x],[y]]
@@ -688,6 +761,14 @@ FileCreateDir, %A_ScriptDir%\data\archive\%CurrentYear%\%CurrentMonth%\%CurrentD
 
 
 
+DownloadSpecified(para_FileToDownload,para_FileName)
+{
+SaveLocation = %A_ScriptDir%\data\temp\%para_FileName%
+UrlDownloadToFile, %para_FileToDownload%, %SaveLocation%
+Return
+}
+
+
 DownloadAllHarnessTracks()
 {
 UrlDownloadToFile, http://tote.racingchannel.com/MEN----H.PHP, %A_ScriptDir%\data\temp\tracksrawhtml\1Main.txt
@@ -777,6 +858,17 @@ RE_EntryNumber := RE_EntryNumber1 * 100 + RE_EntryNumber2
 ;Msgbox, %para_ProgramNumber% is now %RE_EntryNumber% : %RE_EntryNumber1%
 Return %RE_EntryNumber%
 ;Return "ERROR Retrieving Entry Number"
+}
+
+
+Fn_QuickRegEx(para_Input,para_RegEx)
+{
+	RegExMatch(para_Input, para_RegEx, RE_Match)
+	If (RE_Match1 != "")
+	{
+	Return %RE_Match1%
+	}
+Return "null"
 }
 
 
