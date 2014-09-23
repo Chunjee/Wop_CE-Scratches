@@ -352,6 +352,15 @@ FileRead, MemoryFile, \\tvgops\pdxshares\wagerops\Tools\Scratch-Detector\data\ar
 SeenHorses_Array := Fn_JSONtooOBJ(MemoryFile)
 MemoryFile := ;Blank
 }
+;Export Array as a JSON file
+Fn_ExportArray()
+{
+global
+MemoryFile := Fn_JSONfromOBJ(SeenHorses_Array)
+FileDelete, \\tvgops\pdxshares\wagerops\Tools\Scratch-Detector\data\archive\DBs\%A_Today%_%Version_Name%DB.json
+FileAppend, %MemoryFile%, \\tvgops\pdxshares\wagerops\Tools\Scratch-Detector\data\archive\DBs\%A_Today%_%Version_Name%DB.json
+MemoryFile := ;Blank
+}
 
 
 Fn_InsertHorseData()
