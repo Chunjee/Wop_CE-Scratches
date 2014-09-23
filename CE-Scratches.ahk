@@ -47,9 +47,12 @@ ShowGUI()
 UpdateButton:
 ;Immediately disable all GUI buttons to prevent user from causing two Excel sheets from being made. 
 DiableAllButtons()
-;Clear the GUI Listview (Contains all found Coupled Entries)
+;Clear the GUI Listview (Contains all found Coupled Entries) and AllHorses Array
 LV_Delete()
+AllHorses_Array := []
 
+;Import Existing Seen Horses DB File
+Fn_ImportDBData()
 
 ;Switch comment here for live or testing
 ;Download XML of all TB Track Changes
@@ -219,8 +222,7 @@ Loop, %A_ScriptDir%\data\temp\RacingChannel\TBred\*.PHP
 	}
 
 }
-
-Array_Gui(RacingChannel_Array)
+;Array_Gui(RacingChannel_Array)
 
 
 
@@ -245,7 +247,7 @@ Array_Gui(RacingChannel_Array)
 
 
 ;### Look through Excel and send scratched CE to Listview for User to see
-Fn_ReadtoListview()
+Fn_ReadtoListview(AllHorses_Array)
 
 
 
@@ -340,6 +342,18 @@ Ignored_CE = 4
 Return
 }
 
+
+;Imports Existing Seen Horses DB File
+Fn_ImportDBData()
+{
+global
+FormatTime, A_Today, , yyyyMMdd
+FileRead, MemoryFile, \\tvgops\pdxshares\wagerops\Tools\Scratch-Detector\data\archive\DBs\%A_Today%_%Version_Name%DB.json
+SeenHorses_Array := Fn_JSONtooOBJ(MemoryFile)
+MemoryFile := ;Blank
+}
+
+
 Fn_InsertHorseData()
 {
 global
@@ -370,8 +384,118 @@ global
 	The_ScratchStatus := 0
 }
 
+Fn_WriteOutCE(Obj)
+{
+ScratchCheck := 0
+	Loop, % Obj.MaxIndex()
+	{
+		If(Obj[A_Index,"Scratched"] = 1)
+		{
+		ScratchCheck += 1
+		}
+	}
+	If (ScratchCheck != 0)
+	{
+		Loop, % Obj.MaxIndex()
+		{
+			If(Obj[A_Index,"Scratched"] = 1)
+			{
+			Status := "Scratched"
+			}
+			If(Obj[A_Index,"Scratched"] = 3)
+			{
+			Status := "RE-LIVENED"
+			}
+				Loop, % SeenHorses_Array.MaxIndex()
+				{
+					If (SeenHorses_Array[A_Index,"HorseName"] = Obj[A_Index,"HorseName"] && Obj[A_Index,"Scratched"] != 3)
+					{
+					Continue
+					}
+				}
+		LV_Add("",Obj[A_Index,"ProgramNumber"],Status,Obj[A_Index,"HorseName"],Obj[A_Index,"RaceNumber"])
+		LV_ModifyCol(1)
+		LV_ModifyCol(2)
+		LV_ModifyCol(3)
+		LV_ModifyCol(4)
+		}
+	}
+Return %ScratchCheck%
+}
 
-Fn_ReadtoListview()
+
+Fn_ReadtoListview(Obj)
+{
+Scratch_Counter := 0
+CE_FirstFound = 0
+ReRead = 0
+FirstHorse_Toggle := 1
+
+
+;Check the number of horses for all tracks and all races
+Max_Horses := Obj.MaxIndex()
+
+	Loop, % Obj.MaxIndex()
+	{
+	ReRead:
+		If (Obj[A_Index,"RaceNumber"] > 20)
+		{
+		Continue
+		}
+		
+		If (FirstHorse_Toggle = 1 && Obj[A_Index,"HorseName"] != "")
+		{ ;First Horse going into ARRAY~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+			If (CE_Array.MaxIndex() >= 2)
+			{ ;Oh there are some Horses saved in the CE_Array, Write those out. This specific instance should never be encountered.
+			Fn_WriteOutCE(CE_Array)
+			CE_Array := []
+			}
+		CE_Array := []
+		ArrX := 1
+		CE_Array[ArrX,"HorseName"] := Obj[A_Index,"HorseName"]
+		CE_Array[ArrX,"Scratched"] := Obj[A_Index,"Scratched"]
+		CE_Array[ArrX,"ProgramNumber"] := Obj[A_Index,"ProgramNumber"]
+		CE_Array[ArrX,"RaceNumber"] := Obj[A_Index,"RaceNumber"]
+		FirstHorse_Toggle := 0
+		Continue
+		}
+		;Msgbox, % CE_Array[1,"ProgramNumber"] . "  -  " . Obj[A_Index,"ProgramNumber"]
+		If (InStr(Obj[A_Index,"ProgramNumber"],CE_Array[1,"ProgramNumber"], false) && Obj[A_Index,"RaceNumber"] = CE_Array[1,"RaceNumber"])
+		{ ;2nd HORSE FOUND!~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+		ArrX += 1
+		CE_Array[ArrX,"HorseName"] := Obj[A_Index,"HorseName"]
+		CE_Array[ArrX,"Scratched"] := Obj[A_Index,"Scratched"]
+		CE_Array[ArrX,"ProgramNumber"] := Obj[A_Index,"ProgramNumber"]
+		CE_Array[ArrX,"RaceNumber"] := Obj[A_Index,"RaceNumber"]
+		;Array_Gui(CE_Array)
+		Msgbox, % CE_Array[ArrX,"HorseName"]
+		Continue
+		}
+		
+		;Catchall for any other instances
+		If (CE_Array.MaxIndex() >= 2)
+		{
+		Fn_WriteOutCE(CE_Array)
+		CE_Array := []
+		}
+	FirstHorse_Toggle = 1
+	CE_Array := []
+	ArrX := 0
+	ReRead = 1
+	Goto ReRead
+	}
+
+}
+
+
+
+
+
+
+
+
+
+Old_ReadtoListview()
 {
 global
 
@@ -960,7 +1084,7 @@ Gui, Add, Button, x2 y30 w100 h30 gUpdateButton, Update
 Gui, Add, Button, x102 y30 w100 h30 gCheckHarness, Check Harness Tracks
 Gui, Add, Button, x202 y30 w100 h30 gShiftNotes, Open Shift Notes
 Gui, Add, Text, x390 y40 w200 vGUI_EffectedEntries, Effected Entries:
-Gui, Add, ListView, x2 y70 w490 h556 Grid NoSortHdr, #|Status|Name|Race
+Gui, Add, ListView, x2 y70 w490 h556 Grid NoSortHdr gDoubleClick, #|Status|Name|Race
 Gui, Add, Progress, x2 y60 w100 h10 vUpdateProgress, 1
 Gui, Add, Text, x460 y3 +Right, %Version_Name%
 ;Gui, Tab, Options
@@ -968,15 +1092,22 @@ Gui, Add, Text, x460 y3 +Right, %Version_Name%
 
 Gui, Show, x130 y90 h622 w490, Scratch Detector
 Return
-}
 
-MyListView:
-if A_GuiEvent = DoubleClick
-{
-    LV_GetText(RowText, A_EventInfo)  ; Get the text from the row's first field.
-    Msgbox, You double-clicked row number %A_EventInfo%. Text: "%RowText%"
+DoubleClick:
+	If A_GuiEvent = DoubleClick
+	{
+	;Load any existing DB from other Ops
+	Fn_ImportDBData()
+
+		LV_GetText(RowText, A_EventInfo, 3)  ; Get the text from the row's first field.
+		;Msgbox, You double-clicked row number %A_EventInfo%. Text: "%RowText%"
+		X2 := SeenHorses_Array.MaxIndex()
+		X2 += 1
+		SeenHorses_Array[X2,"HorseName"] := RowText
+		Fn_ExportArray()
+	}
+Return
 }
-return
 
 
 DiableAllButtons()
