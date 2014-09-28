@@ -10,7 +10,7 @@
 ;Compile Options
 ;~~~~~~~~~~~~~~~~~~~~~
 StartUp()
-Version_Name = v0.16.1
+Version_Name = v0.16.2
 
 ;Dependencies
 #Include %A_ScriptDir%\Functions
@@ -1040,6 +1040,13 @@ Return "ERROR Retrieving Entry Number"
 }
 
 
+Fn_DeleteDB()
+{
+global
+FileDelete, \\tvgops\pdxshares\wagerops\Tools\Scratch-Detector\data\archive\DBs\%A_Today%_%Version_Name%DB.json
+}
+
+
 ;~~~~~~~~~~~~~~~~~~~~~
 ; Variables
 ;~~~~~~~~~~~~~~~~~~~~~
@@ -1090,16 +1097,6 @@ Pause
 return
 
 
-;~~~~~~~~~~~~~~~~~~~~~
-;Buttons
-;~~~~~~~~~~~~~~~~~~~~~
-
-ShiftNotes:
-Today:= %A_Now%
-FormatTime, CurrentDateTime,, MMddyy
-Run \\tvgops\pdxshares\wagerops\Daily Shift Notes\%CurrentDateTime%.xlsx
-Return
-
 
 
 ;~~~~~~~~~~~~~~~~~~~~~
@@ -1116,6 +1113,7 @@ Gui, Add, Tab, x2 y0 w630 h700 , Scratches|Options
 Gui, Add, Button, x2 y30 w100 h30 gUpdateButton, Update
 Gui, Add, Button, x102 y30 w100 h30 gCheckHarness, Check Harness Tracks
 Gui, Add, Button, x202 y30 w100 h30 gShiftNotes, Open Shift Notes
+Gui, Add, Button, x302 y30 w50 h30 gResetDB, Reset DB
 Gui, Add, Text, x390 y40 w200 vGUI_EffectedEntries, Effected Entries:
 Gui, Add, ListView, x2 y70 w490 h536 Grid NoSortHdr gDoubleClick, #|Status|RC|Name|Race
 Gui, Add, Progress, x2 y60 w100 h10 vUpdateProgress, 1
@@ -1152,6 +1150,21 @@ Menu_File-Restart:
 Reload
 Menu_File-Quit:
 ExitApp
+
+
+;~~~~~~~~~~~~~~~~~~~~~
+;Buttons
+;~~~~~~~~~~~~~~~~~~~~~
+
+ShiftNotes:
+Today:= %A_Now%
+FormatTime, CurrentDateTime,, MMddyy
+Run \\tvgops\pdxshares\wagerops\Daily Shift Notes\%CurrentDateTime%.xlsx
+Return
+
+ResetDB:
+Fn_DeleteDB()
+Return
 }
 
 DoubleClick:
