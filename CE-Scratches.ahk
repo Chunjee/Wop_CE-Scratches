@@ -10,7 +10,7 @@
 ;Compile Options
 ;~~~~~~~~~~~~~~~~~~~~~
 StartUp()
-Version_Name = v0.11
+Version_Name = v0.16.1
 
 ;Dependencies
 #Include %A_ScriptDir%\Functions
@@ -235,6 +235,7 @@ Loop, %A_ScriptDir%\data\temp\RacingChannel\TBred\*.PHP
 				;AllHorses_Array[A_Index,"RCConfirm"] := 0
 				;}
 			}
+		HorseStatus := 0
 		}
 
 	}
@@ -270,11 +271,12 @@ Fn_ReadtoListview(AllHorses_Array)
 
 ;### Show number of effected Races so user knows if there is a new change.
 ;Gui, Tab, Scratches
-guicontrol, Text, GUI_EffectedEntries, % "Effected Entries: " . EffectedEntries
+guicontrol, Text, GUI_EffectedEntries, % "Effected Entries: " . The_EffectedEntries
 
 
 ;Modify Race Column to fit whole title (4th column, 40 pixels/units)
-LV_ModifyCol(4, 40)
+LV_ModifyCol(3, 20)
+LV_ModifyCol(5, 40)
 
 
 EnableAllButtons()
@@ -406,18 +408,34 @@ global
 
 Fn_WriteOutCE(Obj)
 {
-global SeenHorses_Array
+Global SeenHorses_Array
+Global Current_Track := ""
+Global Current_Race := ""
+Global The_EffectedEntries := 0
 
 ScratchCheck := 0
+;Entire Entry checking
 	Loop, % Obj.MaxIndex()
 	{
 		If(Obj[A_Index,"Scratched"] = 1)
 		{
 		ScratchCheck += 1
 		}
+		If(Obj[A_Index,"Scratched"] = 9)
+		{
+		ReLivened := 1
+		}
+		else
+		{
+		ReLivened := 0
+		}
 	}
+	
+	
+	;Individual Runner
 	If (ScratchCheck != 0)
 	{
+	The_EffectedEntries += 1
 		Loop, % Obj.MaxIndex()
 		{
 		CurrentHorse := Obj[A_Index,"HorseName"]
@@ -435,17 +453,34 @@ ScratchCheck := 0
 			}
 				Loop, % SeenHorses_Array.MaxIndex()
 				{
-					If (SeenHorses_Array[A_Index,"HorseName"] = CurrentHorse && Obj[A_Index,"Scratched"] != 9)
+					;skip out of showing this runner if it has been entered but not if it has been re-livened
+					If (SeenHorses_Array[A_Index,"HorseName"] = CurrentHorse && ReLivened != 1)
 					{
 					Continue 2
 					}
 				}
-			Msgbox, % Obj[A_Index,"ConfirmScratch"]
+		;Msgbox, % Obj[A_Index,"ConfirmScratch"] ;Uncomment to see what RacingChannel says for each entry.
+			If (Current_Track != Obj[1,"TrackName"])
+			{
+				If (The_EffectedEntries != 1)
+				{
+				LV_AddBlank()
+				}
+			LV_Add("","","","",Obj[1,"TrackName"],"")
+			Current_Track := Obj[1,"TrackName"]
+			Current_Race := ""
+			}
+			If (Current_Race != Obj[1,"RaceNumber"])
+			{
+			LV_Add("","","","","Race" . Obj[1,"RaceNumber"],"")
+			Current_Race := Obj[1,"RaceNumber"]
+			}
 		LV_Add("",Obj[A_Index,"ProgramNumber"],Status,Obj[A_Index,"ConfirmScratch"],Obj[A_Index,"HorseName"],Obj[A_Index,"RaceNumber"])
 		LV_ModifyCol(1)
 		LV_ModifyCol(2)
 		LV_ModifyCol(3)
 		LV_ModifyCol(4)
+		LV_ModifyCol(5)
 		}
 	}
 Return %ScratchCheck%
@@ -460,9 +495,7 @@ ReRead = 0
 FirstHorse_Toggle := 1
 
 
-;Check the number of horses for all tracks and all races
-Max_Horses := Obj.MaxIndex()
-
+;Loop a total time of all horses
 	Loop, % Obj.MaxIndex()
 	{
 	ReRead:
@@ -471,36 +504,35 @@ Max_Horses := Obj.MaxIndex()
 		Continue
 		}
 		
+		;If this is the first horse of an entry and the horsename is not blank; put it into the CE_Array0 so that it is remembered.
 		If (FirstHorse_Toggle = 1 && Obj[A_Index,"HorseName"] != "")
 		{ ;First Horse going into ARRAY~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-			If (CE_Array.MaxIndex() >= 2)
-			{ ;Oh there are some Horses saved in the CE_Array, Write those out. This specific instance should never be encountered.
-			Fn_WriteOutCE(CE_Array)
-			CE_Array := []
-			}
 		CE_Array := []
 		ArrX := 1
 		CE_Array[ArrX,"HorseName"] := Obj[A_Index,"HorseName"]
 		CE_Array[ArrX,"Scratched"] := Obj[A_Index,"Scratched"]
 		CE_Array[ArrX,"ProgramNumber"] := Obj[A_Index,"ProgramNumber"]
+		CE_Array[ArrX,"TrackName"] := Obj[A_Index,"TrackName"]
 		CE_Array[ArrX,"RaceNumber"] := Obj[A_Index,"RaceNumber"]
 		CE_Array[ArrX,"ConfirmScratch"] := Obj[A_Index,"RCConfirm"]
 		FirstHorse_Toggle := 0
 		Continue
 		}
-		;Msgbox, % CE_Array[1,"ProgramNumber"] . "  -  " . Obj[A_Index,"ProgramNumber"]
+		
+		;If the first entry number is in the current entry; and the race number is the same; they are part of the same coupled entry. (1 is in 1A)
 		If (InStr(Obj[A_Index,"ProgramNumber"],CE_Array[1,"ProgramNumber"], false) && Obj[A_Index,"RaceNumber"] = CE_Array[1,"RaceNumber"])
 		{ ;2nd HORSE FOUND!~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 		ArrX += 1
 		CE_Array[ArrX,"HorseName"] := Obj[A_Index,"HorseName"]
 		CE_Array[ArrX,"Scratched"] := Obj[A_Index,"Scratched"]
 		CE_Array[ArrX,"ProgramNumber"] := Obj[A_Index,"ProgramNumber"]
+		CE_Array[ArrX,"TrackName"] := Obj[A_Index,"TrackName"]
 		CE_Array[ArrX,"RaceNumber"] := Obj[A_Index,"RaceNumber"]
 		CE_Array[ArrX,"ConfirmScratch"] := Obj[A_Index,"RCConfirm"]
 		Continue
 		}
 		
-		;Catchall for any other instances
+		;Catchall for any other instances; Runners not a part of an entry will end up here; triggering the next Program Number to be checked.
 		If (CE_Array.MaxIndex() >= 2)
 		{
 		Fn_WriteOutCE(CE_Array)
@@ -1085,14 +1117,41 @@ Gui, Add, Button, x2 y30 w100 h30 gUpdateButton, Update
 Gui, Add, Button, x102 y30 w100 h30 gCheckHarness, Check Harness Tracks
 Gui, Add, Button, x202 y30 w100 h30 gShiftNotes, Open Shift Notes
 Gui, Add, Text, x390 y40 w200 vGUI_EffectedEntries, Effected Entries:
-Gui, Add, ListView, x2 y70 w490 h556 Grid NoSortHdr gDoubleClick, #|Status|RC|Name|Race
+Gui, Add, ListView, x2 y70 w490 h536 Grid NoSortHdr gDoubleClick, #|Status|RC|Name|Race
 Gui, Add, Progress, x2 y60 w100 h10 vUpdateProgress, 1
-Gui, Add, Text, x460 y3 +Right, %Version_Name%
+Gui, Add, Text, x388 y3 w100 +Right, %Version_Name%
 ;Gui, Tab, Options
 ;Gui, Add, ListView, x2 y70 w490 h580 Grid Checked, #|Status|Name|Race
 
 Gui, Show, x130 y90 h622 w490, Scratch Detector
+
+
+;Menu
+Menu, FileMenu, Add, &Update Now, UpdateButton
+Menu, FileMenu, Add, R&estart`tCtrl+R, Menu_File-Restart
+Menu, FileMenu, Add, E&xit`tCtrl+Q, Menu_File-Quit
+Menu, MenuBar, Add, &File, :FileMenu  ; Attach the sub-menu that was created above
+
+Menu, HelpMenu, Add, &About, Menu_About
+Menu, HelpMenu, Add, &Confluence`tCtrl+H, Menu_Confluence
+Menu, MenuBar, Add, &Help, :HelpMenu
+
+Gui, Menu, MenuBar
 Return
+
+;Menu Shortcuts
+Menu_Confluence:
+Run http://confluence.tvg.com/pages/viewpage.action?pageId=11468878
+Return
+
+Menu_About:
+Msgbox, Checks Equibase for coupled entry scratches. Crosschecks with RacingChannel. `n%Version_Name%
+Return
+
+Menu_File-Restart:
+Reload
+Menu_File-Quit:
+ExitApp
 }
 
 DoubleClick:
@@ -1101,7 +1160,7 @@ DoubleClick:
 	;Load any existing DB from other Ops
 	Fn_ImportDBData()
 
-		LV_GetText(RowText, A_EventInfo, 3)  ; Get the text from the row's first field.
+		LV_GetText(RowText, A_EventInfo, 4)  ; Get the text from the row's first field.
 		;Msgbox, You double-clicked row number %A_EventInfo%. Text: "%RowText%"
 		X2 := SeenHorses_Array.MaxIndex()
 		X2 += 1
