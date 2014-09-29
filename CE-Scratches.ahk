@@ -10,7 +10,7 @@
 ;Compile Options
 ;~~~~~~~~~~~~~~~~~~~~~
 StartUp()
-Version_Name = v0.16.2
+Version_Name = v0.17
 
 ;Dependencies
 #Include %A_ScriptDir%\Functions
@@ -45,6 +45,7 @@ LVA_ListViewAdd("GUI_Listview")
 ;\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/
 
 UpdateButton:
+WinActivate, Scratch Detector
 ;Immediately disable all GUI buttons to prevent user from causing two Excel sheets from being made. 
 DiableAllButtons()
 ;Clear the GUI Listview (Contains all found Coupled Entries) and AllHorses Array\
