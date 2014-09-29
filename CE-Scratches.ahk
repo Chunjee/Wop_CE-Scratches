@@ -16,6 +16,7 @@ Version_Name = v0.16.2
 #Include %A_ScriptDir%\Functions
 #Include sort_arrays
 #Include json_obj
+;#Include LVX
 
 ;For Debug Only
 #Include util_arrays
@@ -37,8 +38,7 @@ StartInternalGlobals()
 ;GUI
 ;~~~~~~~~~~~~~~~~~~~~~
 BuildGUI()
-ShowGUI()
-
+LVA_ListViewAdd("GUI_Listview")
 
 ;/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\
 ;MAIN PROGRAM STARTS HERE
@@ -47,8 +47,10 @@ ShowGUI()
 UpdateButton:
 ;Immediately disable all GUI buttons to prevent user from causing two Excel sheets from being made. 
 DiableAllButtons()
-;Clear the GUI Listview (Contains all found Coupled Entries) and AllHorses Array
+;Clear the GUI Listview (Contains all found Coupled Entries) and AllHorses Array\
+LVA_EraseAllCells("GUI_Listview")
 LV_Delete()
+LVA_Refresh("GUI_Listview")
 AllHorses_Array := []
 
 ;Import Existing Seen Horses DB File
@@ -165,10 +167,10 @@ DownloadSpecified("http://tote.racingchannel.com/MEN----T.PHP","RacingChannel\TB
 Loop, Read, %A_ScriptDir%\data\temp\RacingChannel\TBred_Index.html
 {
 REG = A HREF="(\S+)"><IMG SRC="\/images\/CHG.gif        ;"
-Alf := Fn_QuickRegEx(A_LoopReadLine,REG)
-	If (Alf != "null")
+Buffer_TrackCode := Fn_QuickRegEx(A_LoopReadLine,REG)
+	If (Buffer_TrackCode != "null")
 	{
-	UrlDownloadToFile, https://tote.racingchannel.com/%Alf%, %A_ScriptDir%\data\temp\RacingChannel\TBred\%Alf%
+	UrlDownloadToFile, https://tote.racingchannel.com/%Buffer_TrackCode%, %A_ScriptDir%\data\temp\RacingChannel\TBred\%Buffer_TrackCode%
 	}
 }
 
@@ -275,14 +277,51 @@ guicontrol, Text, GUI_EffectedEntries, % "Effected Entries: " . The_EffectedEntr
 
 
 ;Modify Race Column to fit whole title (4th column, 40 pixels/units)
-LV_ModifyCol(3, 20)
-LV_ModifyCol(5, 40)
+;LV_ModifyCol(3, 20)
+;LV_ModifyCol(5, 40)
+
+Loop % LV_GetCount()
+{
+    LV_GetText(Buffer_ProgramNumber, A_Index, 1)
+	LV_GetText(Buffer_Status, A_Index, 2)
+	LV_GetText(Buffer_HorseName, A_Index, 4)
+    If (Buffer_ProgramNumber != "")
+	{
+		Loop, % SeenHorses_Array.MaxIndex()
+		{
+			If (SeenHorses_Array[A_Index,"HorseName"] = Buffer_HorseName)
+			{
+			Continue 2
+			}
+		}
+	LVA_SetCell("GUI_Listview", A_Index, 0, "ff7f27")
+	If (Buffer_Status = "RE-LIVENED")
+	{
+	LVA_SetCell("GUI_Listview", A_Index, 0, "red")
+	}
+	}
+}
+
+;LVA_ListViewAdd("GUI_Listview", "AR ac cbsilver")
+;LVA_SetCell("GUI_Listview", 5, 1, "", "0x0000FF")
+;LVA_SetCell("GUI_Listview", 4, 4, "aqua")
+
+
+OnMessage("0x4E", "LVA_OnNotify")
+LVA_Refresh("GUI_Listview")
+
 
 
 EnableAllButtons()
 Return
 
-
+LVClick:
+ If (A_GuiEvent = "Normal")
+  {
+    LVA_GetCellNum(0, A_GuiControl)
+   Msgbox, % LVA_GetCellNum("Row") . "     " . LVA_GetCellNum("Col")
+  }
+  
 F3::
 Array_Gui(AllHorses_Array)
 Return
@@ -332,13 +371,13 @@ Return
 
 
 $F1::
-reload
+Goto UpdateButton
 Return
 
 ;/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\
 ; FUNCTIONS
 ;\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/
-
+#Include LVA
 Sb_GlobalNameSpace()
 {
 global
@@ -409,9 +448,9 @@ global
 Fn_WriteOutCE(Obj)
 {
 Global SeenHorses_Array
-Global Current_Track := ""
-Global Current_Race := ""
-Global The_EffectedEntries := 0
+Global Current_Track
+Global Current_Race
+Global The_EffectedEntries
 
 ScratchCheck := 0
 ;Entire Entry checking
@@ -451,14 +490,7 @@ ScratchCheck := 0
 			{
 			Status := "RE-LIVENED"
 			}
-				Loop, % SeenHorses_Array.MaxIndex()
-				{
-					;skip out of showing this runner if it has been entered but not if it has been re-livened
-					If (SeenHorses_Array[A_Index,"HorseName"] = CurrentHorse && ReLivened != 1)
-					{
-					Continue 2
-					}
-				}
+
 		;Msgbox, % Obj[A_Index,"ConfirmScratch"] ;Uncomment to see what RacingChannel says for each entry.
 			If (Current_Track != Obj[1,"TrackName"])
 			{
@@ -748,7 +780,6 @@ TotalExcelIterations := (TrackCounter + HorseCounter)
 			}
 		LV_Add("", Buffer_Number, Buffer_Status, Buffer_Name, Buffer_Race)
 		EffectedEntries += 1
-		ShowGUI()
 
 		LV_ModifyCol()
 		ExcelPointerX += 1
@@ -1063,26 +1094,10 @@ StartInternalGlobals()
 {
 global
 
-FinalTrack := 0
-FinalRace := 0
-FinalCouple := 0
-FinalNumber := 0
-FinalHorse := 0
-FinalScratched := 0
-Linetarget := 0
-WriteNext := 0
-EffectedEntries = 0
 ScratchCounter := 0
-ExcelPointerX := 1
-ExcelPointerY := A
-TrackCounter := 0
-Buffer_Number := 0
-Buffer_Race := 0
-Buffer_Name := 0
-Buffer_Status := 0
-HorseCounter := 0
 TotalTXTLines := 0
 TotalWrittentoExcel := 0
+The_EffectedEntries := 0
 A_LF := "`n"
 ;SetTimer, ProgressBarTimer, 250
 }
@@ -1103,7 +1118,6 @@ return
 ;GUI
 ;~~~~~~~~~~~~~~~~~~~~~
 
-
 BuildGUI()
 {
 Global
@@ -1115,7 +1129,7 @@ Gui, Add, Button, x102 y30 w100 h30 gCheckHarness, Check Harness Tracks
 Gui, Add, Button, x202 y30 w100 h30 gShiftNotes, Open Shift Notes
 Gui, Add, Button, x302 y30 w50 h30 gResetDB, Reset DB
 Gui, Add, Text, x390 y40 w200 vGUI_EffectedEntries, Effected Entries:
-Gui, Add, ListView, x2 y70 w490 h536 Grid NoSortHdr gDoubleClick, #|Status|RC|Name|Race
+Gui, Add, ListView, x2 y70 w490 h536 Grid NoSort +ReDraw gDoubleClick vGUI_Listview, #|Status|RC|Name|Race
 Gui, Add, Progress, x2 y60 w100 h10 vUpdateProgress, 1
 Gui, Add, Text, x388 y3 w100 +Right, %Version_Name%
 ;Gui, Tab, Options
@@ -1173,7 +1187,7 @@ DoubleClick:
 	;Load any existing DB from other Ops
 	Fn_ImportDBData()
 
-		LV_GetText(RowText, A_EventInfo, 4)  ; Get the text from the row's first field.
+		LV_GetText(RowText, A_EventInfo, 4)  ; Get the text from the row's fourth field.
 		;Msgbox, You double-clicked row number %A_EventInfo%. Text: "%RowText%"
 		X2 := SeenHorses_Array.MaxIndex()
 		X2 += 1
@@ -1196,14 +1210,6 @@ EnableAllButtons()
 GuiControl, enable, Update
 GuiControl, enable, Check Harness Tracks
 GuiControl, enable, Open Shift Notes
-}
-
-
-ShowGUI()
-{
-global
-
-Gui, Show
 }
 
 
