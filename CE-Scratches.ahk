@@ -138,27 +138,12 @@ FileContents = ;Free the memory after being written to file.
 		The_HorseName := ""
 		The_ScratchStatus := 0
 		}
-		;RegexMatch(ReadLine, "Coupled (Type)", RE_Scratch)
-		;If (RE_Scratch1 != "")
-		;{
-		;The_ScratchStatus := ""
-		;}
-		
-		
-	;CleanXML("Coupled Type","COUPLED",44,1)
-	;CleanXML("program_number","PN",16,2)
-	;CleanXML("horse_name","HN",12,2)
-	;CleanXML("Scratched N","SC",0,3)
-	;CleanXML("new_value>N<","UNSCRATCH",0,0)
-	;WriteTBtoExcel()
-	;Fn_WriteToArray()
+
 
 	TotalWrittentoExcel += 1
 	vProgressBar := 100 * (TotalWrittentoExcel / TotalTXTLines)
 	GuiControl,, UpdateProgress, %vProgressBar%
 	}
-
-;AllHorses_Array := {TrackName:"", HorseName:"", ProgramNumber:"", EntryNumber:"", RaceNumber:"", Scratched:"" , Seen:""}
 
 
 ;Download TBred from RacingChannel
@@ -295,34 +280,24 @@ Loop % LV_GetCount()
 			Continue 2
 			}
 		}
-	LVA_SetCell("GUI_Listview", A_Index, 0, "ff7f27")
-	If (Buffer_Status = "RE-LIVENED")
-	{
-	LVA_SetCell("GUI_Listview", A_Index, 0, "red")
-	}
+	LVA_SetCell("GUI_Listview", A_Index, 0, "ff7f27") ;Set to Orange if this horse hasn't been doubleclicked yet.
+		If (Buffer_Status = "RE-LIVENED")
+		{
+		LVA_SetCell("GUI_Listview", A_Index, 0, "red") ;Set to Red if it is a "RE-LIVENED" Horse
+		}
 	}
 }
 
-;LVA_ListViewAdd("GUI_Listview", "AR ac cbsilver")
-;LVA_SetCell("GUI_Listview", 5, 1, "", "0x0000FF")
-;LVA_SetCell("GUI_Listview", 4, 4, "aqua")
-
-
+;Refresh the Listview colors (Redraws the GUI Control
 OnMessage("0x4E", "LVA_OnNotify")
 LVA_Refresh("GUI_Listview")
 
 
-
+;END
 EnableAllButtons()
 Return
 
-LVClick:
- If (A_GuiEvent = "Normal")
-  {
-    LVA_GetCellNum(0, A_GuiControl)
-   Msgbox, % LVA_GetCellNum("Row") . "     " . LVA_GetCellNum("Col")
-  }
-  
+
 F3::
 Array_Gui(AllHorses_Array)
 Return
@@ -338,9 +313,9 @@ LV_Delete()
 StartInternalGlobals()
 FileDelete, %A_ScriptDir%\data\archive\%CurrentYear%\%CurrentMonth%\%CurrentDay%\HN_%CurrentDate%.xlsx
 DownloadAllHarnessTracks()
-oExcel := ComObjCreate("Excel.Application") ; create Excel Application object
-oExcel.Workbooks.Add ; create a new workbook (oWorkbook := oExcel.Workbooks.Add)
-oExcel.Visible := false ; make Excel Application invisible
+
+
+
 
 	
 	;Read Each Track's HTML
@@ -359,14 +334,6 @@ oExcel.Visible := false ; make Excel Application invisible
 		}
 	}
 
-;Excel is finished, read it to the GUI ListView
-ReadExceltoListview_HN()
-
-;Save and close Excel
-path = %A_ScriptDir%\data\archive\%CurrentYear%\%CurrentMonth%\%CurrentDay%\HN_%CurrentDate%
-oExcel.ActiveWorkbook.SaveAs(path)
-oExcel.ActiveWorkbook.saved := true
-oExcel.Quit
 EnableAllButtons()
 Return
 
@@ -734,75 +701,6 @@ ReRead = 0
 
 
 
-ReadExceltoListview_HN()
-{
-global
-
-ExcelSheet_Top = 3
-ExcelPointerX = 3
-SheetSelect = 1
-CE_FirstFound = 0
-
-;Find Total Horses for iterations for excel checking. TrackCounter is added since it will read a blank line for every track.
-TotalExcelIterations := (TrackCounter + HorseCounter)
-
-	Loop, %TotalExcelIterations%
-	{
-	
-	
-	Buffer_Number := oExcel.Sheets("T" . SheetSelect).Range("A" . ExcelPointerX).Value
-	Buffer_Name := oExcel.Sheets("T" . SheetSelect).Range("B" . ExcelPointerX).Value
-	Buffer_Status := oExcel.Sheets("T" . SheetSelect).Range("E" . ExcelPointerX).Value
-	Buffer_Race := oExcel.Sheets("T" . SheetSelect).Range("H" . ExcelPointerX).Value
-	
-		IfInString, Buffer_Race, .0000
-		{
-		StringTrimRight, Buffer_Race, Buffer_Race, 7
-		}
-		
-		If (InStr(Buffer_Status, "part"))
-		{
-		;Msgbox, CE found!~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-		CE_FirstFound += 1
-			If (CE_FirstFound = 1)
-			{
-			LV_AddBlank()
-				If (EffectedEntries = 0)
-				{
-				LV_Delete(1)
-				}
-			LV_AddTrack()
-			CE_FoundRace = %Buffer_Race%
-			}
-			If (CE_FoundRace != %Buffer_Race%)
-			{
-			LV_AddRace()
-			CE_FoundRace = %Buffer_Race%
-			}
-		LV_Add("", Buffer_Number, Buffer_Status, Buffer_Name, Buffer_Race)
-		EffectedEntries += 1
-
-		LV_ModifyCol()
-		ExcelPointerX += 1
-		}
-		
-		
-		;if blank excel cell is encountered, move to next sheet
-		If Buffer_Number = 
-		{
-		SheetSelect += 1
-		ExcelPointerX = 2 ;Always adds +1 at top of loop, so will select 3rd row immediately.
-		CE_FirstFound = 0
-		}
-		
-	;Done, move to next line.
-	ExcelPointerX += 1
-	}
-
-}
-
-
-
 
 WriteTrackToListView()
 {
@@ -831,7 +729,6 @@ CE_FirstFound += 1
 
 ReadArrayToListView()
 }
-
 
 
 ReadArrayToListView()
