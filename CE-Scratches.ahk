@@ -10,13 +10,13 @@
 ;Compile Options
 ;~~~~~~~~~~~~~~~~~~~~~
 StartUp()
-Version_Name = v0.17
+Version_Name = v0.18
 
 ;Dependencies
 #Include %A_ScriptDir%\Functions
 #Include sort_arrays
 #Include json_obj
-;#Include LVX
+;#Include LVA (Listed under Functions)
 
 ;For Debug Only
 #Include util_arrays
@@ -53,7 +53,7 @@ LVA_EraseAllCells("GUI_Listview")
 LV_Delete()
 LVA_Refresh("GUI_Listview")
 AllHorses_Array := []
-
+Current_Track := ""
 ;Import Existing Seen Horses DB File
 Fn_ImportDBData()
 
@@ -62,24 +62,23 @@ Fn_ImportDBData()
 GetNewXML("Today_XML.xml")
 ;UseExistingXML()
 
-
-;###Invoke and set Global Variables
+;Invoke and set Global Variables
 StartInternalGlobals()
 
-;###Read XML previously downloaded to FILECONTENTS Var
+;Read XML previously downloaded to FILECONTENTS Var
 FileRead, File_TB_XML, %A_ScriptDir%\data\temp\Today_XML.xml
 StringReplace, File_TB_XML, File_TB_XML, `<,`n`<, All
 FileAppend, %File_TB_XML%, %A_ScriptDir%\data\temp\ConvertedXML.txt
 FileContents = ;Free the memory after being written to file.
+Msgbox, Alf
 
-
-	;###This does nothing but count the number of lines to be used in progress bar calculations
+	;This does nothing but count the number of lines to be used in progress bar calculations
 	Loop, read, %A_ScriptDir%\data\temp\ConvertedXML.txt
 	{
 	TotalTXTLines += 1
 	}
 	
-	;###Read Each line of Converted XML. Valued Information is extracted put into an array
+	;Read Each line of Converted XML. Valued Information is extracted put into an array
 	;THIS NEEDS TO BE RE-WRITTEN USING REGULAR EXPRESSIONS
 	Loop, Read, %A_ScriptDir%\data\temp\ConvertedXML.txt
 	{
@@ -150,6 +149,7 @@ FileContents = ;Free the memory after being written to file.
 FileCreateDir, %A_ScriptDir%\data\temp\RacingChannel
 FileCreateDir, %A_ScriptDir%\data\temp\RacingChannel\TBred
 DownloadSpecified("http://tote.racingchannel.com/MEN----T.PHP","RacingChannel\TBred_Index.html")
+
 Loop, Read, %A_ScriptDir%\data\temp\RacingChannel\TBred_Index.html
 {
 REG = A HREF="(\S+)"><IMG SRC="\/images\/CHG.gif        ;"
@@ -160,105 +160,67 @@ Buffer_TrackCode := Fn_QuickRegEx(A_LoopReadLine,REG)
 	}
 }
 
-X := 0
-RacingChannel_Array := []
-;Read each RacingChannel file
-Loop, %A_ScriptDir%\data\temp\RacingChannel\TBred\*.PHP
+
+
+FileCreateDir, %A_ScriptDir%\data\temp\RacingChannel
+FileCreateDir, %A_ScriptDir%\data\temp\RacingChannel\Harness
+DownloadSpecified("http://tote.racingchannel.com/MEN----H.PHP","RacingChannel\Harness_Index.html")
+
+Loop, Read, %A_ScriptDir%\data\temp\RacingChannel\Harness_Index.html
 {
-	Loop, Read, %A_LoopFileFullPath%
+REG = A HREF="(\S+)"><IMG SRC="\/images\/CHG.gif        ;"
+Buffer_TrackCode := Fn_QuickRegEx(A_LoopReadLine,REG)
+	If (Buffer_TrackCode != "null")
 	{
-	;Msgbox, %A_LoopReadLine%
-	;TrackName
-	RegExFound := Fn_QuickRegEx(A_LoopReadLine,"<TITLE>(\D+)<\/TITLE>")
-		If (RegExFound != "null")
-		{
-		TrackName := RegExFound
-		}
-	;RaceNumber
-	RegExFound := Fn_QuickRegEx(A_LoopReadLine,"A name=race(\d+)>")
-		If (RegExFound != "null")
-		{
-		RaceNumber := RegExFound
-		}
-	;ProgramNumber
-	REG = <TD WIDTH="20"><B>(\d+)<
-	RegExFound := Fn_QuickRegEx(A_LoopReadLine,REG)
-		If (RegExFound != "null")
-		{
-		ProgramNumber := RegExFound
-		}
-	;HorseName
-	REG = WIDTH="150"><B>(\D+)<\/B>
-	RegExFound := Fn_QuickRegEx(A_LoopReadLine,REG)
-		If (RegExFound != "null")
-		{
-		HorseName := RegExFound
-		}
-	;Status
-	REG = scratched (\(part of entry\))
-	RegExFound := Fn_QuickRegEx(A_LoopReadLine,REG)
-		If (RegExFound != "null")
-		{
-		HorseStatus := 1
-		}
-	;Write Out
-	REG = (<TD><\/TD>)
-	RegExFound := Fn_QuickRegEx(A_LoopReadLine,REG)
-		If (RegExFound != "null" && HorseName != "" && HorseStatus = 1)
-		{
-		X += 1
-		RacingChannel_Array[X,"TrackName"] := TrackName
-		RacingChannel_Array[X,"RaceNumber"] := RaceNumber
-		RacingChannel_Array[X,"ProgramNumber"] := ProgramNumber
-		RacingChannel_Array[X,"HorseName"] := HorseName
-		RacingChannel_Array[X,"Status"] := HorseStatus
-			Loop, % AllHorses_Array.MaxIndex()
-			{
-				If (AllHorses_Array[A_Index,"HorseName"] = RacingChannel_Array[X,"HorseName"])
-				{
-				AllHorses_Array[A_Index,"RCConfirm"] := "/"
-				}
-				;Else ;switch back to this if a binary system is needed
-				;{
-				;AllHorses_Array[A_Index,"RCConfirm"] := 0
-				;}
-			}
-		HorseStatus := 0
-		}
-
+	UrlDownloadToFile, https://tote.racingchannel.com/%Buffer_TrackCode%, %A_ScriptDir%\data\temp\RacingChannel\Harness\%Buffer_TrackCode%
 	}
-
 }
 
+;Create RC Array and Dirs to read from
+RacingChannel_Array := []
+Dir_TBred = %A_ScriptDir%\data\temp\RacingChannel\TBred\*.PHP
+Dir_Harness = %A_ScriptDir%\data\temp\RacingChannel\Harness\*.PHP
+
+;Parse Dirs into the array; also compares to AllHorses_Array trying to fix matches
+Fn_ParseRacingChannel(RacingChannel_Array, Dir_TBred)
+Fn_ParseRacingChannel(RacingChannel_Array, Dir_Harness)
 
 
-
+		;UNUSED SORTING
 ;Fn_Sort2DArray(AllHorses_Array, "EntryNumber")
 	;Fn_Sort2DArray(AllHorses_Array, "ProgramNumber")
 ;Fn_Sort2DArray(AllHorses_Array, "RaceNumber")
 ;Fn_Sort2DArray(AllHorses_Array, "TrackName")
 
-
-
-
 ;For index, obj in AllHorses_Array
-;	list3 .= AllHorses_Array[index].ProgramNumber . "    " . AllHorses_Array[index].HorseName . "`n"
-	
+;	list3 .= AllHorses_Array[index].ProgramNumber . "    " . AllHorses_Array[index].HorseName . "`n"	
 ;FileAppend, %list3%, %A_ScriptDir%\allllll.txt
 
 
-;For Array Visualization
-;Array_Gui(AllHorses_Array)
-;FileAppend, % Array_Print(AllHorses_Array), %A_ScriptDir%\alf.txt
-
-
-;### Look through Excel and send scratched CE to Listview for User to see
+;Look through the provided array and send scratched CE entries to Listview for User to see
 Fn_ReadtoListview(AllHorses_Array)
 
+;Now look through the RacingChannel Array for any CE entries that may have been missed. Also handles Harness Scratches
+RCOnly_Scratch := 0
+Loop, % RacingChannel_Array.MaxIndex()
+{
+	If (RacingChannel_Array[A_Index,"OtherScratch"] = 1)
+	{
+	RCOnly_Scratch += 1
+	;The_EffectedEntries += 1 ;Problematic
+		If (Current_Track != RacingChannel_Array[A_Index,"TrackName"])
+		{
+			If (RCOnly_Scratch = 1)
+			{
+			LV_Add("","","","","Racing Channel Only Scratches / Harness","")
+			RCOnly_Scratch := 2
+			}
+		}
+	LV_Add("",RacingChannel_Array[A_Index,"ProgramNumber"],Status,"",RacingChannel_Array[A_Index,"HorseName"] . " at " RacingChannel_Array[A_Index,"TrackName"],RacingChannel_Array[A_Index,"RaceNumber"])
+	}
+}
 
-
-;### Show number of effected Races so user knows if there is a new change.
-;Gui, Tab, Scratches
+;Show number of effected Races so user knows if there is a new change.
 guicontrol, Text, GUI_EffectedEntries, % "Effected Entries: " . The_EffectedEntries
 
 
@@ -270,12 +232,12 @@ Loop % LV_GetCount()
 {
     LV_GetText(Buffer_ProgramNumber, A_Index, 1)
 	LV_GetText(Buffer_Status, A_Index, 2)
-	LV_GetText(Buffer_HorseName, A_Index, 4)
+	LV_GetText(Buffer_Name, A_Index, 4) ;Commonly the Horsename but sometimes not. 
     If (Buffer_ProgramNumber != "")
 	{
 		Loop, % SeenHorses_Array.MaxIndex()
 		{
-			If (SeenHorses_Array[A_Index,"HorseName"] = Buffer_HorseName)
+			If (SeenHorses_Array[A_Index,"HorseName"] = Buffer_Name)
 			{
 			Continue 2
 			}
@@ -286,7 +248,20 @@ Loop % LV_GetCount()
 		LVA_SetCell("GUI_Listview", A_Index, 0, "red") ;Set to Red if it is a "RE-LIVENED" Horse
 		}
 	}
+	
+	;If (Buffer_ProgramNumber = "" && !InStr(Buffer_Name,"Race"))
+	;{
+	;LVA_SetCell("GUI_Listview", A_Index, 0, "red") ;Set to Red if it is a "RE-LIVENED" Horse
+	;}
 }
+
+;Fix Default Size of all Columns in Listview
+LV_ModifyCol(1)
+LV_ModifyCol(2)
+LV_ModifyCol(3, 20)
+LV_ModifyCol(4)
+LV_ModifyCol(5, 40)
+LV_ModifyCol(6, 100)
 
 ;Refresh the Listview colors (Redraws the GUI Control
 OnMessage("0x4E", "LVA_OnNotify")
@@ -298,43 +273,22 @@ EnableAllButtons()
 Return
 
 
-F3::
-Array_Gui(AllHorses_Array)
+^F3::
+;For Array visualization
+SetTitleMatchMode, 2
+IfWinActive, Scratch Detector
+{
+Array_Gui(RacingChannel_Array)
+;FileAppend, % Array_Print(AllHorses_Array), %A_ScriptDir%\alf.txt
+}
 Return
 
 ;~~~~~~~~~~~~~~~~~~~~~
-;Check Harness Tracks
+;Check Results
 ;~~~~~~~~~~~~~~~~~~~~~
-; This is basically the same instructions as TB but its a little outdated as it was just copy-pasted. Working on a way to merge Excel reading as one function
-; Main problem is that Harness HMTL does not always include the other parts of a Coupled Entry; so it is fundimentally different in that way.
-CheckHarness:
-DiableAllButtons()
-LV_Delete()
-StartInternalGlobals()
-FileDelete, %A_ScriptDir%\data\archive\%CurrentYear%\%CurrentMonth%\%CurrentDay%\HN_%CurrentDate%.xlsx
-DownloadAllHarnessTracks()
-
-
-
-
-	
-	;Read Each Track's HTML
-	Loop, %A_ScriptDir%\data\temp\tracksrawhtml\*_H.txt
-	{	
-		;Read each line in the HTML looking for "part of entry"
-		Loop, read, %A_ScriptDir%\data\temp\tracksrawhtml\%A_LoopFileName%
-		{
-		ReadLine = %A_LoopReadLine%	
-		CleanXML("<TITLE>","TN",8,16)
-		CleanXML("<TD WIDTH=+150+><B><U>","RN",23,13)
-		CleanXML("part of entry","COUPLED",1,1)
-		CleanXML("<TD WIDTH=+20+><B>","PN",19,9)
-		CleanXML("<TD ALIGN=+LEFT+ WIDTH=+150+><B>","HN",33,9)
-		CleanXML("<TD ALIGN=+LEFT+ WIDTH=+250+>","SC",39,5)
-		}
-	}
-
-EnableAllButtons()
+; Going to need a list of every CE runner first
+CheckResults:
+Msgbox, This is not done yet.
 Return
 
 
@@ -413,6 +367,103 @@ global
 	The_ScratchStatus := 0
 }
 
+
+Fn_TitleCase(para_String)
+{
+StringUpper, l_ReturnValue, para_String, T
+Return %l_ReturnValue%
+}
+
+
+Fn_TrackTitle(para_String)
+{
+StringUpper, l_ReturnValue, para_String, T
+Return % "■ " . l_ReturnValue
+}
+
+Fn_ParseRacingChannel(para_Array, para_FileDir)
+{
+	Global AllHorses_Array
+	X := 0
+	
+	;Read each RacingChannel file
+	Loop, %para_FileDir%
+	{
+		Loop, Read, %A_LoopFileFullPath%
+		{
+		;Msgbox, %A_LoopReadLine%
+		;TrackName
+		RegExFound := Fn_QuickRegEx(A_LoopReadLine,"<TITLE>(\D+) Changes<\/TITLE>")
+			If (RegExFound != "null")
+			{
+			TrackName := RegExFound
+			}
+		;RaceNumber
+		RegExFound := Fn_QuickRegEx(A_LoopReadLine,"A name=race(\d+)>")
+			If (RegExFound != "null")
+			{
+			RaceNumber := RegExFound
+			}
+		;ProgramNumber
+		REG = <TD WIDTH="20"><B>(\d+)<
+		RegExFound := Fn_QuickRegEx(A_LoopReadLine,REG)
+			If (RegExFound != "null")
+			{
+			ProgramNumber := RegExFound
+			}
+		;HorseName
+		REG = WIDTH="150"><B>(\D+)<\/B>
+		RegExFound := Fn_QuickRegEx(A_LoopReadLine,REG)
+			If (RegExFound != "null")
+			{
+			HorseName := RegExFound
+			}
+		;Status
+		REG = scratched (\(part of entry\))
+		RegExFound := Fn_QuickRegEx(A_LoopReadLine,REG)
+			If (RegExFound != "null")
+			{
+			HorseStatus := 1
+			}
+		;Write Out
+		REG = (<TD><\/TD>)
+		RegExFound := Fn_QuickRegEx(A_LoopReadLine,REG)
+			If (RegExFound != "null" && HorseName != "" && HorseStatus = 1)
+			{
+			X += 1
+			para_Array[X,"TrackName"] := TrackName
+			para_Array[X,"RaceNumber"] := RaceNumber
+			para_Array[X,"ProgramNumber"] := ProgramNumber
+			para_Array[X,"HorseName"] := HorseName
+			para_Array[X,"Status"] := HorseStatus
+			
+				MatchFound := 0
+				Loop, % AllHorses_Array.MaxIndex()
+				{
+					If (AllHorses_Array[A_Index,"HorseName"] = para_Array[X,"HorseName"])
+					{
+					AllHorses_Array[A_Index,"RCConfirm"] := "/"
+					MatchFound := 1
+					}
+					;Else ;switch back to this if a binary system is needed
+					;{
+					;AllHorses_Array[A_Index,"RCConfirm"] := 0
+					;}
+				}
+				If (MatchFound != 1)
+				{
+				para_Array[X,"OtherScratch"] := 1
+				}
+			HorseStatus := 0
+			}
+
+		}
+
+	}
+	
+}
+
+
 Fn_WriteOutCE(Obj)
 {
 Global SeenHorses_Array
@@ -466,7 +517,7 @@ ScratchCheck := 0
 				{
 				LV_AddBlank()
 				}
-			LV_Add("","","","",Obj[1,"TrackName"],"")
+			LV_Add("","","","",Fn_TrackTitle(Obj[1,"TrackName"]),"")
 			Current_Track := Obj[1,"TrackName"]
 			Current_Race := ""
 			}
@@ -476,11 +527,6 @@ ScratchCheck := 0
 			Current_Race := Obj[1,"RaceNumber"]
 			}
 		LV_Add("",Obj[A_Index,"ProgramNumber"],Status,Obj[A_Index,"ConfirmScratch"],Obj[A_Index,"HorseName"],Obj[A_Index,"RaceNumber"])
-		LV_ModifyCol(1)
-		LV_ModifyCol(2)
-		LV_ModifyCol(3)
-		LV_ModifyCol(4)
-		LV_ModifyCol(5)
 		}
 	}
 Return %ScratchCheck%
@@ -549,282 +595,13 @@ FirstHorse_Toggle := 1
 
 
 
-
-
-
-
-
-
-Old_ReadtoListview()
-{
-global
-
-Scratch_Counter = 0
-FirstHorse_Toggle = 1
-CE_FirstFound = 0
-ReRead = 0
-
-;DEPRECIATED Find Total Horses for iterations for excel checking. TrackCounter is added since it will read a blank line for every track.
-;DEPRECIATED TotalExcelIterations := (TrackCounter + HorseCounter)
-	
-							AllHorses_ArraX := 0
-							MaxArraySize := AllHorses_Array.MaxIndex()
-							Loop, %MaxArraySize%
-							{
-								If (The_HorseName = AllHorses_Array[A_Index, "HorseName"] && The_ScratchStatus != 0)
-								{
-								;Alf
-								}
-							}
-	
-	
-	While (FinishedReading != 1)
-	{
-	;traytip, alf, %Number%, 10, 1
-	;Msgbox, alf, %Number%
-	If (AllHorses_ArraX >= MaxArraySize)
-	{
-	FinishedReading := 1
-	}
-		If (ReRead != 1)
-		{
-		AllHorses_ArraX += 1
-		Number := AllHorses_Array[AllHorses_ArraX,"ProgramNumber"]
-		Name := AllHorses_Array[AllHorses_ArraX,"HorseName"]
-		Status := AllHorses_Array[AllHorses_ArraX,"Scratched"]
-		Race := AllHorses_Array[AllHorses_ArraX,"RaceNumber"]
-		}
-	ReRead = 0
-	
-	ExcelReadAgain:
-	;Ok this exists to save the next horse found after all of a CE has been detected
-	; I mean, since the loop doesn't detect the end of a CE list until a different program number is found, we need to go here
-	; when a new horse is found and triggers the CE output, but not loose that new horse which might be a 2 with a 2B coming next
-		
-		;discard this horse because we don't care about anything over 9, unless there was a race with 9+ CE but that should never happen. Eventually work down to 4 or 5
-		If (Number > Ignored_CE)
-		{
-		Continue
-		}
-		;Msgbox, %Number% %Name% %AllHorses_ArraX%
-				IfInString, Race, .0000
-				{
-				StringTrimRight, Race, Race, 7
-				}
-				IfInString, Number, .0000
-				{
-				StringTrimRight, Number, Number, 7
-				}
-		;End of Track Reached, Turn Page~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-		;This is highest because we don't want things getting confused with "" matching "" for a coupled entry
-		;We also can't go to the next page immediately because we need to check if there is some CE array to output
-		;NewRace := Race
-		;If (NewRace != LastRace)
-		;{
-		;LastRace := Race
-		;Blank_Counter += 1
-			;If (Blank_Counter >= 2)
-			;{
-			;CE_FirstFound = 0 ;Set next track to have found no Coupled Entries
-			;Blank_Counter = 0
-			;Continue
-			;}	
-		;}
-		;FIRST HORSE GOING INTO ARRAY~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-		If (FirstHorse_Toggle = 1 && Name != "")
-		{
-			If (ArrX >= 2) 
-			{
-			WriteTrackToListView()
-			FirstHorse_Toggle = 1
-			CE_Arr := [[x],[y]]
-			ArrX = 0
-			Scratch_Counter = 0
-			ReRead = 1
-			Continue
-			}
-		ArrX = 1 ; switch to += if needed
-		CE_Arr[ArrX,1] := Number
-		CE_Arr[ArrX,3] := Name
-		CE_Arr[ArrX,2] := Status
-		CE_Arr[ArrX,4] := Race
-		CE_Race_Found = %Race%
-		FirstHorseProgramNumber = %Number%
-		Current_Race = %Race%
-		FirstHorse_Toggle = 0
-		Scratch_Counter = 0 ;might be a better place for this
-		ScratchCheck()
-		Continue
-		}
-		
-		
-		;2nd HORSE FOUND!~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-		IfInString, Number, %FirstHorseProgramNumber%
-		{
-			If (Current_Race = Race)
-			{
-			ArrX += 1
-			CE_Arr[ArrX,1] := Number
-			CE_Arr[ArrX,3] := Name
-			CE_Arr[ArrX,2] := Status
-			CE_Arr[ArrX,4] := Race
-			ScratchCheck()
-			Continue
-			}
-		
-		}
-		
-		
-		
-		;ALL ELSE~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-			If (ArrX >= 2) ; && Name != "")
-			{
-			EffectedEntries += 1
-			WriteTrackToListView()
-			FirstHorse_Toggle = 1
-			CE_Arr := [[x],[y]]
-			ArrX := 0
-			Scratch_Counter = 0
-			ReRead = 1
-			Continue
-			}
-		FirstHorse_Toggle = 1
-		Scratch_Counter = 0
-		CE_Arr := [[x],[y]]
-		ArrX := 0
-		ReRead = 1
-		Continue
-
-	}
-
-}
-
-
-
-
-WriteTrackToListView()
-{
-global
-
-CE_FirstFound += 1
-;Create a blank line to separate tracks a little, add more LV_AddBlank() if larger gap is needed
-	If (CE_FirstFound = 1)
-	{
-	LV_AddBlank()
-	;Delete Blank Line if this is the first line of the entire program
-		If (EffectedEntries= 1)
-		{
-		LV_Delete(1)
-		}
-	LV_AddTrack()
-	CE_FoundRace = %Race%
-	}
-			
-	;This helps determine if a new RACE LV needs to be added in the case of a 2nd CE program number
-	If (CE_FoundRace != %Race%)
-	{
-	LV_AddRace()
-	CE_FoundRace = %Race%
-	}
-
-ReadArrayToListView()
-}
-
-
-ReadArrayToListView()
-{
-global
-
-	x = 0
-	Loop %ArrX%, ;Uh ok this needs to be changed to MaxIndex(Array) not some dumb variable
-	{
-	x += 1
-	
-	;DEPRECIATED - Just write out the Array without assigning values to buffer variables. This is left as a note for what each array value holds
-	;Buffer_Number := CE_Arr[x,1]
-	;Buffer_Name := CE_Arr[x,2]
-	;Buffer_Status := CE_Arr[x,3]
-	;Buffer_Race := CE_Arr[x,4]
-		
-	;Found Coupled Entries are stored into this Array, write them out to the GUI Listview
-	LV_Add("", CE_Arr[x,1], CE_Arr[x,2], CE_Arr[x,3], CE_Arr[x,4])
-	LV_ModifyCol()
-	}
-
-}
-
-
-
-ScratchCheck()
-{
-global
-
-	If Status = "Scratched"
-	{
-	;increase scratch counter
-	Scratch_Counter += 1
-	}
-}
-
-
-
 LV_AddBlank()
 {
 LV_Add("", "", "", "", "")
 }
 
-LV_AddTrack()
-{
-global
 
-Buffer_TrackName := oExcel.Sheets("T" . SheetSelect).Range("A" . 1).Value
-LV_Add("", "", "", Buffer_TrackName, "")
-}
-
-LV_AddRace()
-{
-global
-
-Buffer_RaceNumber := CE_Arr[1,4]
-Buffer_RaceLV := "Race " . Buffer_RaceNumber
-;StringTrimRight, Buffer_RaceLV, Buffer_RaceLV, 7
-LV_Add("", "", "", Buffer_RaceLV, "")
-}
-
-
-;This function exists only becuase I didn't know how to use Regular Expressions. Should be depreciated asap
-CleanXML(TargetWord,Label,TrimLeft,TrimRight)
-{
-global
-
-ValueLine := 0
-
-; NO STOP PUTTING THIS IN HERE IT WILL BREAK EVERYTHING AS THIS IS RUN MULTIPLES TIMES EACH LINE
-; Linetarget = alf
-; NO
-
-		IfInString, A_LoopReadLine, %TargetWord%
-		{
-		Linetarget = %Label%
-		StringTrimRight, Stringy, A_LoopReadLine, %TrimRight%
-		StringTrimLeft, Stringy, Stringy, %TrimLeft%
-		ValueLine = 1
-		}
-}
-
-
-
-
-JustReplace(Old,New)
-{
-global
-
-; Replace all spaces with pluses:
-StringReplace, FileContents, FileContents, %Old%, %New%, All
-}
-
-
-
+;Legacy, Not used
 ReturnReplace(Word)
 {
 global
@@ -915,17 +692,6 @@ UrlDownloadToFile, http://tote.racingchannel.com/MEN----H.PHP, %A_ScriptDir%\dat
 		
 	}
 
-}
-
-DownloadAllTracksHTML_DEPRECIATED()
-{
-global
-
-	Loop, read, %A_ScriptDir%\data\StartingTracks.txt,
-	{
-	UrlDownloadToFile, http://www.equibase.com/static/latechanges/html/latechanges%A_LoopReadLine%.html, %A_ScriptDir%\data\temp\tracksrawhtml\%A_LoopReadLine%.txt
-	}
-	
 }
 
 
@@ -1023,11 +789,11 @@ Global
 Gui, Add, Tab, x2 y0 w630 h700 , Scratches|Options
 ;Gui, Tab, Scratches
 Gui, Add, Button, x2 y30 w100 h30 gUpdateButton, Update
-Gui, Add, Button, x102 y30 w100 h30 gCheckHarness, Check Harness Tracks
+Gui, Add, Button, x102 y30 w100 h30 gCheckResults, Check Results
 Gui, Add, Button, x202 y30 w100 h30 gShiftNotes, Open Shift Notes
 Gui, Add, Button, x302 y30 w50 h30 gResetDB, Reset DB
 Gui, Add, Text, x390 y40 w200 vGUI_EffectedEntries, Effected Entries:
-Gui, Add, ListView, x2 y70 w490 h536 Grid NoSort +ReDraw gDoubleClick vGUI_Listview, #|Status|RC|Name|Race
+Gui, Add, ListView, x2 y70 w490 h536 Grid NoSort +ReDraw gDoubleClick vGUI_Listview, #|Status|RC|Name|Race|
 Gui, Add, Progress, x2 y60 w100 h10 vUpdateProgress, 1
 Gui, Add, Text, x388 y3 w100 +Right, %Version_Name%
 ;Gui, Tab, Options
@@ -1098,7 +864,7 @@ Return
 DiableAllButtons()
 {
 GuiControl, disable, Update
-GuiControl, disable, Check Harness Tracks
+GuiControl, disable, Check Results
 GuiControl, disable, Open Shift Notes
 }
 
@@ -1106,7 +872,7 @@ GuiControl, disable, Open Shift Notes
 EnableAllButtons()
 {
 GuiControl, enable, Update
-GuiControl, enable, Check Harness Tracks
+GuiControl, disable, Check Results
 GuiControl, enable, Open Shift Notes
 }
 
