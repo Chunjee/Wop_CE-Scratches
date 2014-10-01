@@ -70,7 +70,6 @@ FileRead, File_TB_XML, %A_ScriptDir%\data\temp\Today_XML.xml
 StringReplace, File_TB_XML, File_TB_XML, `<,`n`<, All
 FileAppend, %File_TB_XML%, %A_ScriptDir%\data\temp\ConvertedXML.txt
 FileContents = ;Free the memory after being written to file.
-Msgbox, Alf
 
 	;This does nothing but count the number of lines to be used in progress bar calculations
 	Loop, read, %A_ScriptDir%\data\temp\ConvertedXML.txt
@@ -201,22 +200,22 @@ Fn_ParseRacingChannel(RacingChannel_Array, Dir_Harness)
 Fn_ReadtoListview(AllHorses_Array)
 
 ;Now look through the RacingChannel Array for any CE entries that may have been missed. Also handles Harness Scratches
-RCOnly_Scratch := 0
+RCOnly_Scratch = 0
 Loop, % RacingChannel_Array.MaxIndex()
 {
 	If (RacingChannel_Array[A_Index,"OtherScratch"] = 1)
 	{
 	RCOnly_Scratch += 1
 	;The_EffectedEntries += 1 ;Problematic
-		If (Current_Track != RacingChannel_Array[A_Index,"TrackName"])
-		{
-			If (RCOnly_Scratch = 1)
+		If (RCOnly_Scratch = 1) ;Simple duplicate
 			{
-			LV_Add("","","","","Racing Channel Only Scratches / Harness","")
+			LV_AddBlank()
+			LV_AddBlank()
+			LV_AddBlank()
+			LV_Add("","","","","Harness / Racing Channel Only Scratches","")
 			RCOnly_Scratch := 2
 			}
-		}
-	LV_Add("",RacingChannel_Array[A_Index,"ProgramNumber"],Status,"",RacingChannel_Array[A_Index,"HorseName"] . " at " RacingChannel_Array[A_Index,"TrackName"],RacingChannel_Array[A_Index,"RaceNumber"])
+	LV_Add("",RacingChannel_Array[A_Index,"ProgramNumber"],"Scratched","",RacingChannel_Array[A_Index,"HorseName"] . " at " Fn_TrackTitle(RacingChannel_Array[A_Index,"TrackName"]),RacingChannel_Array[A_Index,"RaceNumber"])
 	}
 }
 
@@ -405,7 +404,7 @@ Fn_ParseRacingChannel(para_Array, para_FileDir)
 			RaceNumber := RegExFound
 			}
 		;ProgramNumber
-		REG = <TD WIDTH="20"><B>(\d+)<
+		REG = <TD WIDTH="20"><B>(\w+)<
 		RegExFound := Fn_QuickRegEx(A_LoopReadLine,REG)
 			If (RegExFound != "null")
 			{
@@ -632,7 +631,7 @@ global
 
 FileDelete, %A_ScriptDir%\data\temp\ConvertedXML.txt
 FileSelectFile, XMLPath
-FileCopy, %XMLPath%, %A_ScriptDir%\data\temp\EquibaseXML.xml, 1
+FileCopy, %XMLPath%, %A_ScriptDir%\data\temp\Today_XML.xml, 1
 }
 
 
@@ -765,15 +764,6 @@ The_EffectedEntries := 0
 A_LF := "`n"
 ;SetTimer, ProgressBarTimer, 250
 }
-
-
-
-;~~~~~~~~~~~~~~~~~~~~~
-; Temp Controls
-;~~~~~~~~~~~~~~~~~~~~~
-F9::
-Pause
-return
 
 
 
