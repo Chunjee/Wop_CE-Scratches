@@ -10,7 +10,7 @@
 ;Compile Options
 ;~~~~~~~~~~~~~~~~~~~~~
 StartUp()
-Version_Name = v0.18
+Version_Name = v0.18.2
 
 ;Dependencies
 #Include %A_ScriptDir%\Functions
@@ -61,6 +61,12 @@ Fn_ImportDBData()
 ;Download XML of all TB Track Changes
 GetNewXML("Today_XML.xml")
 ;UseExistingXML()
+
+
+; Move Equibase's xml to Archive
+TodaysFile = %A_ScriptDir%\data\temp\*.xml
+Fn_CreateArchiveDir(TodaysFile)
+
 
 ;Invoke and set Global Variables
 StartInternalGlobals()
@@ -114,11 +120,25 @@ FileContents = ;Free the memory after being written to file.
 		The_EntryNumber := The_RaceNumber * 1000 + The_EntryNumber
 		}
 		
+		REG = <change_description>(\S+)
+		RegexMatch(ReadLine, REG, RE_Scratch)
+		If (RE_Scratch1 = "Scratched")
+		{
+		The_ScratchGate := 1
+		}
+		If (RE_Scratch1 = "First")
+		{
+		The_ScratchGate := 0
+		}
+		
 		REG = <new_value>(Y)
 		RegexMatch(ReadLine, REG, RE_Scratch)
 		If (RE_Scratch1 != "")
 		{
-		The_ScratchStatus := 1
+			If (The_ScratchGate = 1)
+			{
+			The_ScratchStatus := 1
+			}
 		}
 		
 		REG = <new_value>(N)
@@ -135,6 +155,9 @@ FileContents = ;Free the memory after being written to file.
 		Fn_InsertHorseData()
 		The_HorseName := ""
 		The_ScratchStatus := 0
+		The_EntryNumber := ""
+		The_ProgramNumber := ""
+		The_ScratchGate := 0
 		}
 
 
@@ -263,9 +286,9 @@ LV_ModifyCol(5, 40)
 LV_ModifyCol(6, 100)
 
 ;Refresh the Listview colors (Redraws the GUI Control
-OnMessage("0x4E", "LVA_OnNotify")
 LVA_Refresh("GUI_Listview")
-
+OnMessage("0x4E", "LVA_OnNotify")
+;Guicontrol, +ReDraw, GUI_Listview 
 
 ;END
 EnableAllButtons()
@@ -564,8 +587,8 @@ FirstHorse_Toggle := 1
 		Continue
 		}
 		
-		;If the first entry number is in the current entry; and the race number is the same; they are part of the same coupled entry. (1 is in 1A)
-		If (InStr(Obj[A_Index,"ProgramNumber"],CE_Array[1,"ProgramNumber"], false) && Obj[A_Index,"RaceNumber"] = CE_Array[1,"RaceNumber"])
+		;If the first entry number is in the current entry; AND the race number is the same; they are part of the same coupled entry. (1 is in 1A) AND tracknames match.
+		If (InStr(Obj[A_Index,"ProgramNumber"],CE_Array[1,"ProgramNumber"], false) && Obj[A_Index,"RaceNumber"] = CE_Array[1,"RaceNumber"] && Obj[A_Index,"TrackName"] = CE_Array[1,"TrackName"])
 		{ ;2nd HORSE FOUND!~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 		ArrX += 1
 		CE_Array[ArrX,"HorseName"] := Obj[A_Index,"HorseName"]
@@ -635,7 +658,7 @@ FileCopy, %XMLPath%, %A_ScriptDir%\data\temp\Today_XML.xml, 1
 }
 
 
-CreateArchiveDir()
+Fn_CreateArchiveDir(para_FileToArchive)
 {
 global
 
@@ -643,9 +666,11 @@ global
 FormatTime, CurrentDate,, MMddyy
 FormatTime, CurrentYear,, yyyy
 FormatTime, CurrentMonth,, MMMM
+FormatTime, CurrentMonthNumber,, MM
 FormatTime, CurrentDay,, dd
 
-FileCreateDir, %A_ScriptDir%\data\archive\%CurrentYear%\%CurrentMonth%\%CurrentDay%\
+FileCreateDir, \\tvgops\pdxshares\wagerops\Tools\Scratch-Detector\data\archive\%CurrentYear%\%CurrentMonthNumber%-%CurrentMonth%\%CurrentDay%\
+FileCopy, %para_FileToArchive%, \\tvgops\pdxshares\wagerops\Tools\Scratch-Detector\data\archive\%CurrentYear%\%CurrentMonthNumber%-%CurrentMonth%\%CurrentDay%, 1
 }
 
 
