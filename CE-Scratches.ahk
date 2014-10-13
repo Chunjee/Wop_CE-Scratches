@@ -10,7 +10,7 @@
 ;Compile Options
 ;~~~~~~~~~~~~~~~~~~~~~
 StartUp()
-Version_Name = v0.18.2
+Version_Name = v0.20
 
 ;Dependencies
 #Include %A_ScriptDir%\Functions
@@ -171,7 +171,6 @@ FileContents = ;Free the memory after being written to file.
 FileCreateDir, %A_ScriptDir%\data\temp\RacingChannel
 FileCreateDir, %A_ScriptDir%\data\temp\RacingChannel\TBred
 DownloadSpecified("http://tote.racingchannel.com/MEN----T.PHP","RacingChannel\TBred_Index.html")
-
 Loop, Read, %A_ScriptDir%\data\temp\RacingChannel\TBred_Index.html
 {
 REG = A HREF="(\S+)"><IMG SRC="\/images\/CHG.gif        ;"
@@ -252,6 +251,7 @@ guicontrol, Text, GUI_EffectedEntries, % "Effected Entries: " . The_EffectedEntr
 
 Loop % LV_GetCount()
 {
+	The_OuterIndex := A_Index
     LV_GetText(Buffer_ProgramNumber, A_Index, 1)
 	LV_GetText(Buffer_Status, A_Index, 2)
 	LV_GetText(Buffer_Name, A_Index, 4) ;Commonly the Horsename but sometimes not. 
@@ -261,6 +261,10 @@ Loop % LV_GetCount()
 		{
 			If (SeenHorses_Array[A_Index,"HorseName"] = Buffer_Name)
 			{
+				If (Buffer_Status = "RE-LIVENED")
+				{
+				LVA_SetCell("GUI_Listview", The_OuterIndex, 0, "red") ;Set to Red if it is a "RE-LIVENED" Horse
+				}
 			Continue 2
 			}
 		}
@@ -290,6 +294,20 @@ LVA_Refresh("GUI_Listview")
 OnMessage("0x4E", "LVA_OnNotify")
 ;Guicontrol, +ReDraw, GUI_Listview 
 
+;Warn User if there are no racingchannel files
+IfNotExist, %A_ScriptDir%\data\temp\RacingChannel\TBred\*.PHP
+	{
+	Fn_MouseToolTip("No RacingChannel Data Downloaded. Login and Retry", 10)
+	}
+;IfNotExist, %A_ScriptDir%\data\temp\RacingChannel\Harness\*.PHP
+;	{
+;	Fn_MouseToolTip("No RacingChannel Data Downloaded. Login and Retry", 10)
+;	}
+	IfNotExist, %A_ScriptDir%\data\temp\ConvertedXML.txt
+	{
+	Fn_MouseToolTip("No EQUIBASE Data Downloaded. Check that site is accessible", 10)
+	}
+	
 ;END
 EnableAllButtons()
 Return
@@ -899,6 +917,13 @@ global
 Gui, Destroy
 }
 
+
+Fn_MouseToolTip("No RacingChannel Data Downloaded", 10)
+MouseGetPos, M_PosX, M_PosY, WinID
+ToolTip, "No RacingChannel Data Downloaded", M_PosX, M_PosY, 1
+ToolTip
+	
+	
 GuiClose:
 ExitApp
 
@@ -909,3 +934,20 @@ ProgressBarTimer:
 SetTimer, ProgressBarTimer, -250
 GuiControl,, UpdateProgress, %vProgressBar%
 Return
+
+Fn_MouseToolTip(para_Message, 10)
+{
+Global The_Message := para_Message
+ToolTip_X := 0
+MouseToolTip:
+SetTimer, MouseToolTip, 100
+MouseGetPos, M_PosX, M_PosY, WinID
+ToolTip, %The_Message%, M_PosX, M_PosY, 1
+ToolTip_X += 1
+	If(ToolTip_X = 100)
+	{
+	ToolTip
+	SetTimer, MouseToolTip, Off
+	}
+return
+}
