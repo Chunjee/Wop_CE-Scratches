@@ -10,7 +10,7 @@
 ;Compile Options
 ;~~~~~~~~~~~~~~~~~~~~~
 StartUp()
-Version_Name = v0.20
+Version_Name = v0.21
 
 ;Dependencies
 #Include %A_ScriptDir%\Functions
@@ -43,9 +43,12 @@ LVA_ListViewAdd("GUI_Listview")
 ;/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\
 ;MAIN PROGRAM STARTS HERE
 ;\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/
-
+	If (0)
+	{
+	SetTimer, UpdateButton, %Option_Refresh%
+	}
+	
 UpdateButton:
-WinActivate, Scratch Detector
 ;Immediately disable all GUI buttons to prevent user from causing two Excel sheets from being made. 
 DiableAllButtons()
 ;Clear the GUI Listview (Contains all found Coupled Entries) and AllHorses Array\
@@ -242,7 +245,7 @@ Loop, % RacingChannel_Array.MaxIndex()
 }
 
 ;Show number of effected Races so user knows if there is a new change.
-guicontrol, Text, GUI_EffectedEntries, % "Effected Entries: " . The_EffectedEntries
+guicontrol, Text, GUI_EffectedEntries, % The_EffectedEntries
 
 
 ;Modify Race Column to fit whole title (4th column, 40 pixels/units)
@@ -333,6 +336,7 @@ Return
 
 
 $F1::
+WinActivate, Scratch Detector
 Goto UpdateButton
 Return
 
@@ -343,10 +347,6 @@ Return
 Sb_GlobalNameSpace()
 {
 global
-
-The_IgnoredProgramNumber = 0
-;Ignore any entry over this number, example: don't look for Entry 9 or 9A. An experiment at running faster. Should be uneeded now that they are stored in an array
-
 
 CE_Arr := [[x],[y]]
 ArrX = 0
@@ -580,12 +580,11 @@ CE_FirstFound = 0
 ReRead = 0
 FirstHorse_Toggle := 1
 
-
 ;Loop a total time of all horses
 	Loop, % Obj.MaxIndex()
 	{
 	ReRead:
-		If (Obj[A_Index,"ProgramNumber"] > 9)
+		If (Obj[A_Index,"ProgramNumber"] >= 9)
 		{ ;WARNING - This will cause issues it there is ever a 9A, 10X, etc
 		Continue
 		}
@@ -818,18 +817,29 @@ A_LF := "`n"
 BuildGUI()
 {
 Global
-
+Gui, Add, Text, x388 y3 w100 +Right, %Version_Name%
 Gui, Add, Tab, x2 y0 w630 h700 , Scratches|Options
 ;Gui, Tab, Scratches
 Gui, Add, Button, x2 y30 w100 h30 gUpdateButton, Update
 Gui, Add, Button, x102 y30 w100 h30 gCheckResults, Check Results
 Gui, Add, Button, x202 y30 w100 h30 gShiftNotes, Open Shift Notes
 Gui, Add, Button, x302 y30 w50 h30 gResetDB, Reset DB
-Gui, Add, Text, x390 y40 w200 vGUI_EffectedEntries, Effected Entries:
 Gui, Add, ListView, x2 y70 w490 h536 Grid NoSort +ReDraw gDoubleClick vGUI_Listview, #|Status|RC|Name|Race|
 Gui, Add, Progress, x2 y60 w100 h10 vUpdateProgress, 1
-Gui, Add, Text, x388 y3 w100 +Right, %Version_Name%
-;Gui, Tab, Options
+Gui, Font, s8 w70, Arial
+Gui, Add, Text, x360 y40 w200, Effected Entries:
+Gui, Font, s30 w700, Arial
+Gui, Add, Text, x444 y24 w200 vGUI_EffectedEntries,
+Gui, Font,
+;Gui, Add, Text, x388 y3 w100 +Right, %Version_Name%
+Gui, Tab, Options
+Gui, Add, CheckBox, x10 y30 vGUI_RefreshCheckBox gAutoUpdate, Auto-Update every
+Gui, Add, edit, x122 y28 w30 vGUI_RefreshAmmount Number, 10
+Gui, Add, text, x160 y30, minutes
+GUI, Submit, NoHide
+
+;Gui, Add, Button, x2 y30 w100 h30 gUpdateButton, Update
+;Option_Refresh
 ;Gui, Add, ListView, x2 y70 w490 h580 Grid Checked, #|Status|Name|Race
 
 Gui, Show, x130 y90 h622 w490, Scratch Detector
@@ -848,6 +858,26 @@ Menu, MenuBar, Add, &Help, :HelpMenu
 Gui, Menu, MenuBar
 Return
 
+;Options
+AutoUpdate:
+GUI, Submit, NoHide
+RefreshMilli := 0
+RefreshMilli := Fn_QuickRegEx(GUI_RefreshAmmount,"(\d+)")
+
+	If(RefreshMilli >= 10 && GUI_RefreshCheckBox = 1)
+	{
+	RefreshMilli := RefreshMilli * 10000
+	GuiControl,, GUI_RefreshCheckBox, 1
+	SetTimer, UpdateButton, %RefreshMilli%
+	}
+	If(GUI_RefreshCheckBox = 0)
+	{
+	GuiControl,, GUI_RefreshCheckBox, 0
+	SetTimer, UpdateButton, Off
+	}
+Return
+
+
 ;Menu Shortcuts
 Menu_Confluence:
 Run http://confluence.tvg.com/pages/viewpage.action?pageId=11468878
@@ -863,10 +893,6 @@ Menu_File-Quit:
 ExitApp
 
 
-;~~~~~~~~~~~~~~~~~~~~~
-;Buttons
-;~~~~~~~~~~~~~~~~~~~~~
-
 ShiftNotes:
 Today:= %A_Now%
 FormatTime, CurrentDateTime,, MMddyy
@@ -877,6 +903,22 @@ ResetDB:
 Fn_DeleteDB()
 Return
 }
+
+GUI_UpdateProgress(para_Progress1, para_Progress2 = 0)
+{
+	;Calculate progress if two parameters input. otherwise set if only one entered
+	If (para_Progress2 = 0)
+	{
+	GuiControl,, UpdateProgress, %para_Progress1%+
+	}
+	Else
+	{
+	para_Progress1 := (para_Progress1 / para_Progress2) * 100
+	GuiControl,, UpdateProgress, %para_Progress1%
+	}
+
+}
+
 
 DoubleClick:
 	If A_GuiEvent = DoubleClick
