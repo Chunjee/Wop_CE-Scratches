@@ -10,7 +10,7 @@
 ;Compile Options
 ;~~~~~~~~~~~~~~~~~~~~~
 StartUp()
-Version_Name = v0.21
+Version_Name = v0.22
 
 ;Dependencies
 #Include %A_ScriptDir%\Functions
@@ -47,7 +47,7 @@ LVA_ListViewAdd("GUI_Listview")
 	{
 	SetTimer, UpdateButton, %Option_Refresh%
 	}
-	
+
 UpdateButton:
 ;Immediately disable all GUI buttons to prevent user from causing two Excel sheets from being made. 
 DiableAllButtons()
@@ -65,6 +65,9 @@ Fn_ImportDBData()
 GetNewXML("Today_XML.xml")
 ;UseExistingXML()
 
+;Get Harness Track Data
+Sb_DownloadAllRacingChannel()
+
 
 ; Move Equibase's xml to Archive
 TodaysFile = %A_ScriptDir%\data\temp\*.xml
@@ -80,12 +83,23 @@ StringReplace, File_TB_XML, File_TB_XML, `<,`n`<, All
 FileAppend, %File_TB_XML%, %A_ScriptDir%\data\temp\ConvertedXML.txt
 FileContents = ;Free the memory after being written to file.
 
-	;This does nothing but count the number of lines to be used in progress bar calculations
-	Loop, read, %A_ScriptDir%\data\temp\ConvertedXML.txt
-	{
-	TotalTXTLines += 1
-	}
-	
+
+										;This does nothing but count the number of lines to be used in progress bar calculations
+										The_EquibaseTotalTXTLines := 0
+										Loop, read, %A_ScriptDir%\data\temp\ConvertedXML.txt
+										{
+										The_EquibaseTotalTXTLines += 1
+										}
+
+										The_RCTotalTXTLines := 0
+										Loop, %A_ScriptDir%\data\temp\RacingChannel\*.*
+										{
+											Loop, Read, %A_LoopFileFullPath%
+											{
+											The_RCTotalTXTLines += 1
+											}
+										}
+
 	;Read Each line of Converted XML. Valued Information is extracted put into an array
 	;THIS NEEDS TO BE RE-WRITTEN USING REGULAR EXPRESSIONS
 	Loop, Read, %A_ScriptDir%\data\temp\ConvertedXML.txt
@@ -164,41 +178,13 @@ FileContents = ;Free the memory after being written to file.
 		}
 
 
-	TotalWrittentoExcel += 1
-	vProgressBar := 100 * (TotalWrittentoExcel / TotalTXTLines)
-	GuiControl,, UpdateProgress, %vProgressBar%
+	;TotalWrittentoExcel += 1
+	;vProgressBar := 100 * (TotalWrittentoExcel / )
+	GUI_UpdateProgress(A_Index,The_EquibaseTotalTXTLines)
+	;GuiControl,, UpdateProgress, %vProgressBar%
 	}
 
 
-;Download TBred from RacingChannel
-FileCreateDir, %A_ScriptDir%\data\temp\RacingChannel
-FileCreateDir, %A_ScriptDir%\data\temp\RacingChannel\TBred
-DownloadSpecified("http://tote.racingchannel.com/MEN----T.PHP","RacingChannel\TBred_Index.html")
-Loop, Read, %A_ScriptDir%\data\temp\RacingChannel\TBred_Index.html
-{
-REG = A HREF="(\S+)"><IMG SRC="\/images\/CHG.gif        ;"
-Buffer_TrackCode := Fn_QuickRegEx(A_LoopReadLine,REG)
-	If (Buffer_TrackCode != "null")
-	{
-	UrlDownloadToFile, https://tote.racingchannel.com/%Buffer_TrackCode%, %A_ScriptDir%\data\temp\RacingChannel\TBred\%Buffer_TrackCode%
-	}
-}
-
-
-
-FileCreateDir, %A_ScriptDir%\data\temp\RacingChannel
-FileCreateDir, %A_ScriptDir%\data\temp\RacingChannel\Harness
-DownloadSpecified("http://tote.racingchannel.com/MEN----H.PHP","RacingChannel\Harness_Index.html")
-
-Loop, Read, %A_ScriptDir%\data\temp\RacingChannel\Harness_Index.html
-{
-REG = A HREF="(\S+)"><IMG SRC="\/images\/CHG.gif        ;"
-Buffer_TrackCode := Fn_QuickRegEx(A_LoopReadLine,REG)
-	If (Buffer_TrackCode != "null")
-	{
-	UrlDownloadToFile, https://tote.racingchannel.com/%Buffer_TrackCode%, %A_ScriptDir%\data\temp\RacingChannel\Harness\%Buffer_TrackCode%
-	}
-}
 
 ;Create RC Array and Dirs to read from
 RacingChannel_Array := []
@@ -252,6 +238,9 @@ guicontrol, Text, GUI_EffectedEntries, % The_EffectedEntries
 ;LV_ModifyCol(3, 20)
 ;LV_ModifyCol(5, 40)
 
+Data_UnHandledRunners := 0
+Data_TotalScratches := 0
+
 Loop % LV_GetCount()
 {
 	The_OuterIndex := A_Index
@@ -260,6 +249,11 @@ Loop % LV_GetCount()
 	LV_GetText(Buffer_Name, A_Index, 4) ;Commonly the Horsename but sometimes not. 
     If (Buffer_ProgramNumber != "")
 	{
+		If(Buffer_Status != "")
+		{
+		Data_TotalScratches += 1
+		}
+		
 		Loop, % SeenHorses_Array.MaxIndex()
 		{
 			If (SeenHorses_Array[A_Index,"HorseName"] = Buffer_Name)
@@ -267,21 +261,22 @@ Loop % LV_GetCount()
 				If (Buffer_Status = "RE-LIVENED")
 				{
 				LVA_SetCell("GUI_Listview", The_OuterIndex, 0, "red") ;Set to Red if it is a "RE-LIVENED" Horse
+				Data_UnHandledRunners += 1
 				}
 			Continue 2
 			}
 		}
 	LVA_SetCell("GUI_Listview", A_Index, 0, "ff7f27") ;Set to Orange if this horse hasn't been doubleclicked yet.
+		If(Buffer_Status != "")
+		{
+		Data_UnHandledRunners += 1
+		}
 		If (Buffer_Status = "RE-LIVENED")
 		{
 		LVA_SetCell("GUI_Listview", A_Index, 0, "red") ;Set to Red if it is a "RE-LIVENED" Horse
 		}
 	}
-	
-	;If (Buffer_ProgramNumber = "" && !InStr(Buffer_Name,"Race"))
-	;{
-	;LVA_SetCell("GUI_Listview", A_Index, 0, "red") ;Set to Red if it is a "RE-LIVENED" Horse
-	;}
+
 }
 
 ;Fix Default Size of all Columns in Listview
@@ -295,7 +290,24 @@ LV_ModifyCol(6, 100)
 ;Refresh the Listview colors (Redraws the GUI Control
 LVA_Refresh("GUI_Listview")
 OnMessage("0x4E", "LVA_OnNotify")
-;Guicontrol, +ReDraw, GUI_Listview 
+;Guicontrol, +ReDraw, GUI_Listview
+
+;Send Runner numbers to GUI
+	If (Data_UnHandledRunners = 0)
+	{
+	GuiControl, +cBlack, GUI_UnhandledScratches,
+	}
+	If (Data_UnHandledRunners > 0)
+	{
+	GuiControl, +cff7f27, GUI_UnhandledScratches,
+	Sb_FlashGUI()
+	}
+	If (Data_UnHandledRunners > 4)
+	{
+	GuiControl, +cRed, GUI_UnhandledScratches,
+	}
+GuiControl, Text, GUI_UnhandledScratches, % Data_UnHandledRunners
+GuiControl, Text, GUI_TotalScratches, % Data_TotalScratches
 
 ;Warn User if there are no racingchannel files
 IfNotExist, %A_ScriptDir%\data\temp\RacingChannel\TBred\*.PHP
@@ -311,7 +323,10 @@ IfNotExist, %A_ScriptDir%\data\temp\RacingChannel\TBred\*.PHP
 	Fn_MouseToolTip("No EQUIBASE Data Downloaded. Check that site is accessible", 10)
 	}
 	
+	
+
 ;END
+GUI_UpdateProgress(100)
 EnableAllButtons()
 Return
 
@@ -423,12 +438,15 @@ Return % "■ " . l_ReturnValue
 
 Fn_ParseRacingChannel(para_Array, para_FileDir)
 {
+
 	Global AllHorses_Array
+	Global The_RCTotalTXTLines
 	X := 0
 	
 	;Read each RacingChannel file
 	Loop, %para_FileDir%
 	{
+	GUI_UpdateProgress(A_Index,The_RCTotalTXTLines)
 		Loop, Read, %A_LoopFileFullPath%
 		{
 		;Msgbox, %A_LoopReadLine%
@@ -700,41 +718,22 @@ Return
 }
 
 
-DownloadAllHarnessTracks()
+Fn_FileSize(para_File)
 {
-UrlDownloadToFile, http://tote.racingchannel.com/MEN----H.PHP, %A_ScriptDir%\data\temp\tracksrawhtml\1Main.txt
-	Loop, read, %A_ScriptDir%\data\temp\tracksrawhtml\1Main.txt
+l_FileSize := ;MakeThis Variable Empty
+
+;Check the size of the file specified in the Function argument/option
+FileGetSize, l_FileSize, %para_File%, k
+
+	;If the filesize is NOT blank
+	If (l_FileSize != "")
 	{
-		If (InStr(A_LoopReadLine, "Changes"))
-		{
-		;Linetarget = %Label%
-		StringTrimRight, TrackUrl, A_LoopReadLine, 52
-		StringTrimLeft, TrackUrl, TrackUrl, 13
-		StringTrimRight, TrackCode, TrackUrl, 6
-		StringTrimLeft, TrackCode, TrackCode, 3
-		;ValueLine = 1
-		
-		TrackToDownload := "http://tote.racingchannel.com/" . TrackUrl
-		;http://tote.racingchannel.com/CHGMAY-C.PHP
-		UrlDownloadToFile, %TrackToDownload%, %A_ScriptDir%\data\temp\tracksrawhtml\%TrackCode%.txt
-		
-		
-		FileRead, FileContents, %A_ScriptDir%\data\temp\tracksrawhtml\%TrackCode%.txt
-
-		;###Clean quotes out of HTML so that is can be read more accurately.
-		StringReplace, FileContents, FileContents,",+, All ;"
-		
-		FileAppend,
-		(
-		%FileContents%
-		), %A_ScriptDir%\data\temp\tracksrawhtml\%TrackCode%_H.txt
-		FileContents = ;Free the memory after being written to file.
-		}
-		
+	;Exit the Function with the value of the filesize
+	Return %l_FileSize%
 	}
-
+;filesize was blank or not understood. Return 0
+Return 0
 }
-
 
 Fn_ConvertEntryNumber(para_ProgramNumber)
 {
@@ -800,11 +799,8 @@ StartInternalGlobals()
 global
 
 ScratchCounter := 0
-TotalTXTLines := 0
-TotalWrittentoExcel := 0
 The_EffectedEntries := 0
 A_LF := "`n"
-;SetTimer, ProgressBarTimer, 250
 }
 
 
@@ -826,12 +822,24 @@ Gui, Add, Button, x202 y30 w100 h30 gShiftNotes, Open Shift Notes
 Gui, Add, Button, x302 y30 w50 h30 gResetDB, Reset DB
 Gui, Add, ListView, x2 y70 w490 h536 Grid NoSort +ReDraw gDoubleClick vGUI_Listview, #|Status|RC|Name|Race|
 Gui, Add, Progress, x2 y60 w100 h10 vUpdateProgress, 1
-Gui, Font, s8 w70, Arial
-Gui, Add, Text, x360 y40 w200, Effected Entries:
+
+
+;w200
 Gui, Font, s30 w700, Arial
-Gui, Add, Text, x444 y24 w200 vGUI_EffectedEntries,
+Gui, Add, Text, x360 y24 w42 +Right vGUI_UnhandledScratches gMsgUnhandledScratches,
+Gui, Add, Text, x410 y24, /
+Gui, Font, s20 w700, Arial
+Gui, Add, Text, x430 y24 vGUI_TotalScratches gMsgTotalScratches,
+Gui, Font, s12 w10, Arial
+Gui, Add, Text, x464 y46 vGUI_EffectedEntries gMsgEffectedEntries,
+;Gui, Font, s30 w700, Arial
+
+Gui, Font, s6 w10, Arial
+;Gui, Add, Text, x360 y30, Unhandled / Scratches
+;Gui, Add, Text, x404 y58, Effected Entries:
 Gui, Font,
-;Gui, Add, Text, x388 y3 w100 +Right, %Version_Name%
+
+
 Gui, Tab, Options
 Gui, Add, CheckBox, x10 y30 vGUI_RefreshCheckBox gAutoUpdate, Auto-Update every
 Gui, Add, edit, x122 y28 w30 vGUI_RefreshAmmount Number, 10
@@ -858,6 +866,19 @@ Menu, MenuBar, Add, &Help, :HelpMenu
 Gui, Menu, MenuBar
 Return
 
+
+MsgTotalScratches:
+Msgbox, This shows the total number of coupled entry scratches
+Return
+
+MsgUnhandledScratches:
+Msgbox, This shows the number of coupled entries that have not been handled
+Return
+
+MsgEffectedEntries:
+Msgbox, This shows the number of coupled entries effected by scratches
+Return
+
 ;Options
 AutoUpdate:
 GUI, Submit, NoHide
@@ -866,7 +887,7 @@ RefreshMilli := Fn_QuickRegEx(GUI_RefreshAmmount,"(\d+)")
 
 	If(RefreshMilli >= 10 && GUI_RefreshCheckBox = 1)
 	{
-	RefreshMilli := RefreshMilli * 10000
+	RefreshMilli := RefreshMilli * 60000
 	GuiControl,, GUI_RefreshCheckBox, 1
 	SetTimer, UpdateButton, %RefreshMilli%
 	}
@@ -923,15 +944,34 @@ GUI_UpdateProgress(para_Progress1, para_Progress2 = 0)
 DoubleClick:
 	If A_GuiEvent = DoubleClick
 	{
-	;Load any existing DB from other Ops
-	Fn_ImportDBData()
-
-		LV_GetText(RowText, A_EventInfo, 4)  ; Get the text from the row's fourth field.
-		;Msgbox, You double-clicked row number %A_EventInfo%. Text: "%RowText%"
+		If !InStr(RowText,"■")
+		{
+		;Load any existing DB from other Ops
+		Fn_ImportDBData()
+		
+		;Get the text from the row's fourth field. Runner Name
+		LV_GetText(RowText, A_EventInfo, 4)
+		;Get Max size of object imported and Add one
 		X2 := SeenHorses_Array.MaxIndex()
 		X2 += 1
+		;Add the new name and Export
 		SeenHorses_Array[X2,"HorseName"] := RowText
 		Fn_ExportArray()
+		}
+		
+		
+		If(InStr(RowText,"■"))
+		{
+		TrackName := Fn_QuickRegEx(RowText,"■ (.+)")
+			Loop % LV_GetCount()
+			{
+			
+			}
+		
+		
+		LV_GetText(RowText, A_EventInfo, 4)
+		}
+	
 	}
 Return
 
@@ -970,12 +1010,61 @@ GuiClose:
 ExitApp
 
 ;~~~~~~~~~~~~~~~~~~~~~
+;Subroutines
+;~~~~~~~~~~~~~~~~~~~~~
+
+Sb_DownloadAllRacingChannel()
+{
+;Download TBred and Harness from RacingChannel
+FileCreateDir, %A_ScriptDir%\data\temp\RacingChannel
+FileCreateDir, %A_ScriptDir%\data\temp\RacingChannel\TBred
+DownloadSpecified("http://tote.racingchannel.com/MEN----T.PHP","RacingChannel\TBred_Index.html")
+
+	Loop, Read, %A_ScriptDir%\data\temp\RacingChannel\TBred_Index.html
+	{
+	REG = A HREF="(\S+)"><IMG SRC="\/images\/CHG.gif        ;"
+	Buffer_TrackCode := Fn_QuickRegEx(A_LoopReadLine,REG)
+		If (Buffer_TrackCode != "null")
+		{
+		UrlDownloadToFile, https://tote.racingchannel.com/%Buffer_TrackCode%, %A_ScriptDir%\data\temp\RacingChannel\TBred\%Buffer_TrackCode%
+		}
+
+	}
+
+	FileCreateDir, %A_ScriptDir%\data\temp\RacingChannel
+	FileCreateDir, %A_ScriptDir%\data\temp\RacingChannel\Harness
+	DownloadSpecified("http://tote.racingchannel.com/MEN----H.PHP","RacingChannel\Harness_Index.html")
+
+	Loop, Read, %A_ScriptDir%\data\temp\RacingChannel\Harness_Index.html
+	{
+	REG = A HREF="(\S+)"><IMG SRC="\/images\/CHG.gif        ;"
+	Buffer_TrackCode := Fn_QuickRegEx(A_LoopReadLine,REG)
+		If (Buffer_TrackCode != "null")
+		{
+		UrlDownloadToFile, https://tote.racingchannel.com/%Buffer_TrackCode%, %A_ScriptDir%\data\temp\RacingChannel\Harness\%Buffer_TrackCode%
+		}
+	}
+}
+
+Sb_FlashGUI()
+{
+SetTimer, FlashGUI, -1000
+Return
+FlashGUI:
+
+	Loop, 6
+	{
+	Gui Flash
+	Sleep 500  ;Do not change this value
+	}
+Return
+}
+
+
+
+;~~~~~~~~~~~~~~~~~~~~~
 ;Timers
 ;~~~~~~~~~~~~~~~~~~~~~
-ProgressBarTimer:
-SetTimer, ProgressBarTimer, -250
-GuiControl,, UpdateProgress, %vProgressBar%
-Return
 
 Fn_MouseToolTip(para_Message, 10)
 {
