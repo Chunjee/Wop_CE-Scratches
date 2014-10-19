@@ -942,15 +942,16 @@ GUI_UpdateProgress(para_Progress1, para_Progress2 = 0)
 
 
 DoubleClick:
+;Send Horsename to Json file so it won't be highlighted
 	If A_GuiEvent = DoubleClick
-	{
+	{		
+		;Get the text from the row's fourth field. Runner Name
+		LV_GetText(RowText, A_EventInfo, 4)
+		
 		If !InStr(RowText,"■")
 		{
 		;Load any existing DB from other Ops
 		Fn_ImportDBData()
-		
-		;Get the text from the row's fourth field. Runner Name
-		LV_GetText(RowText, A_EventInfo, 4)
 		;Get Max size of object imported and Add one
 		X2 := SeenHorses_Array.MaxIndex()
 		X2 += 1
@@ -960,17 +961,57 @@ DoubleClick:
 		}
 		
 		
-		If(InStr(RowText,"■"))
+;Put all Shift note formatted Scratches onto the clipboard if user doubleclicked a '■ TrackName'
+		If (InStr(RowText,"■"))
 		{
+		Clip =
+		Ignore_Bool := True
 		TrackName := Fn_QuickRegEx(RowText,"■ (.+)")
 			Loop % LV_GetCount()
 			{
-			
+			LV_GetText(Buffer_Name, A_Index, 4)
+			LV_GetText(Buffer_Status, A_Index, 2)
+			LV_GetText(Buffer_ProgramNumber, A_Index, 1)
+			LV_GetText(Buffer_Race, A_Index, 5)
+				If (InStr("■",Buffer_Name) && Ignore_Bool = False)
+				{
+				Ignore_Bool := True
+				}
+				If (InStr(Buffer_Name,TrackName))
+				{
+				Ignore_Bool := False
+				Continue
+				}
+				;Get the Race Number as a header, lead, thing
+				If (!InStr(Buffer_Name,"■") && Buffer_ProgramNumber = "" && Buffer_Race = "" && Ignore_Bool = False)
+				{
+					If(Clip != "")
+					{
+					Clip := Clip . ")  "
+					}
+				Clip := Clip . Fn_QuickRegEx(Buffer_Name,"Race(\d+)")
+				Clip := Clip . "-("
+				FirstEntry_Bool := True
+				}
+				If (Buffer_ProgramNumber != "" && Buffer_Status != "" && Ignore_Bool = False)
+				{
+					If(FirstEntry_Bool = True)
+					{
+					Clip := Clip . Buffer_ProgramNumber
+					FirstEntry_Bool := False
+					Continue
+					}
+				Clip := Clip . "," . Buffer_ProgramNumber
+				}
+				
 			}
-		
-		
-		LV_GetText(RowText, A_EventInfo, 4)
+		If(Clip != "")
+		{
+		Clip := Clip . ")"
 		}
+		ClipBoard := Clip
+		}
+		
 	
 	}
 Return
