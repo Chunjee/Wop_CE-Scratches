@@ -10,7 +10,7 @@
 ;Compile Options
 ;~~~~~~~~~~~~~~~~~~~~~
 StartUp()
-Version_Name = v0.22
+Version_Name = v0.23
 
 ;Dependencies
 #Include %A_ScriptDir%\Functions
@@ -51,6 +51,7 @@ LVA_ListViewAdd("GUI_Listview")
 UpdateButton:
 ;Immediately disable all GUI buttons to prevent user from causing two Excel sheets from being made. 
 DiableAllButtons()
+Fn_GUI_UpdateProgress(1)
 ;Clear the GUI Listview (Contains all found Coupled Entries) and AllHorses Array\
 LVA_EraseAllCells("GUI_Listview")
 LV_Delete()
@@ -180,7 +181,7 @@ FileContents = ;Free the memory after being written to file.
 
 	;TotalWrittentoExcel += 1
 	;vProgressBar := 100 * (TotalWrittentoExcel / )
-	GUI_UpdateProgress(A_Index,The_EquibaseTotalTXTLines)
+	Fn_GUI_UpdateProgress(A_Index,The_EquibaseTotalTXTLines)
 	;GuiControl,, UpdateProgress, %vProgressBar%
 	}
 
@@ -266,9 +267,9 @@ Loop % LV_GetCount()
 			Continue 2
 			}
 		}
-	LVA_SetCell("GUI_Listview", A_Index, 0, "ff7f27") ;Set to Orange if this horse hasn't been doubleclicked yet.
-		If(Buffer_Status != "")
+		If(Buffer_Status = "Scratched")
 		{
+		LVA_SetCell("GUI_Listview", A_Index, 0, "ff7f27") ;Set to Orange if this horse hasn't been doubleclicked yet.
 		Data_UnHandledRunners += 1
 		}
 		If (Buffer_Status = "RE-LIVENED")
@@ -326,7 +327,7 @@ IfNotExist, %A_ScriptDir%\data\temp\RacingChannel\TBred\*.PHP
 	
 
 ;END
-GUI_UpdateProgress(100)
+Fn_GUI_UpdateProgress(100)
 EnableAllButtons()
 Return
 
@@ -446,7 +447,7 @@ Fn_ParseRacingChannel(para_Array, para_FileDir)
 	;Read each RacingChannel file
 	Loop, %para_FileDir%
 	{
-	GUI_UpdateProgress(A_Index,The_RCTotalTXTLines)
+	Fn_GUI_UpdateProgress(A_Index,The_RCTotalTXTLines)
 		Loop, Read, %A_LoopFileFullPath%
 		{
 		;Msgbox, %A_LoopReadLine%
@@ -925,7 +926,7 @@ Fn_DeleteDB()
 Return
 }
 
-GUI_UpdateProgress(para_Progress1, para_Progress2 = 0)
+Fn_GUI_UpdateProgress(para_Progress1, para_Progress2 = 0)
 {
 	;Calculate progress if two parameters input. otherwise set if only one entered
 	If (para_Progress2 = 0)
@@ -961,22 +962,26 @@ DoubleClick:
 		}
 		
 		
-;Put all Shift note formatted Scratches onto the clipboard if user doubleclicked a '■ TrackName'
+;Put all Shift note formatted Scratches onto the clipboard if user double-clicked a '■ TrackName'
 		If (InStr(RowText,"■"))
 		{
 		Clip =
 		Ignore_Bool := True
 		TrackName := Fn_QuickRegEx(RowText,"■ (.+)")
+			;Cycle the entire Listview
 			Loop % LV_GetCount()
 			{
+			;Hold each row in Buffer_ variables
 			LV_GetText(Buffer_Name, A_Index, 4)
 			LV_GetText(Buffer_Status, A_Index, 2)
 			LV_GetText(Buffer_ProgramNumber, A_Index, 1)
 			LV_GetText(Buffer_Race, A_Index, 5)
+				;Reset ignore flag if a new track is loaded into memory
 				If (InStr("■",Buffer_Name) && Ignore_Bool = False)
 				{
 				Ignore_Bool := True
 				}
+				;Cycle all the way to the Row user double-clicked
 				If (InStr(Buffer_Name,TrackName))
 				{
 				Ignore_Bool := False
@@ -993,6 +998,7 @@ DoubleClick:
 				Clip := Clip . "-("
 				FirstEntry_Bool := True
 				}
+				;Put each entry into the Clip; if its the first entry; don't put a comma in front
 				If (Buffer_ProgramNumber != "" && Buffer_Status != "" && Ignore_Bool = False)
 				{
 					If(FirstEntry_Bool = True)
@@ -1003,7 +1009,6 @@ DoubleClick:
 					}
 				Clip := Clip . "," . Buffer_ProgramNumber
 				}
-				
 			}
 		If(Clip != "")
 		{
@@ -1011,8 +1016,6 @@ DoubleClick:
 		}
 		ClipBoard := Clip
 		}
-		
-	
 	}
 Return
 
