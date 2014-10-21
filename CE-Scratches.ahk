@@ -10,7 +10,7 @@
 ;Compile Options
 ;~~~~~~~~~~~~~~~~~~~~~
 StartUp()
-Version_Name = v0.23
+Version_Name = v0.24
 
 ;Dependencies
 #Include %A_ScriptDir%\Functions
@@ -28,11 +28,6 @@ Version_Name = v0.23
 Sb_GlobalNameSpace()
 ;###Invoke and set Global Variables
 StartInternalGlobals()
-
-;FileRead, MemoryFile, %A_ScriptDir%\DB.json
-;AllHorses_Array := Fn_JSONtooOBJ(MemoryFile)
-;MemoryFile := ;Blank
-
 
 ;~~~~~~~~~~~~~~~~~~~~~
 ;GUI
@@ -58,6 +53,10 @@ LV_Delete()
 LVA_Refresh("GUI_Listview")
 AllHorses_Array := []
 Current_Track := ""
+;Invoke and set Global Variables
+StartInternalGlobals()
+
+
 ;Import Existing Seen Horses DB File
 Fn_ImportDBData()
 
@@ -70,22 +69,20 @@ GetNewXML("Today_XML.xml")
 Sb_DownloadAllRacingChannel()
 
 
+
 ; Move Equibase's xml to Archive
 TodaysFile = %A_ScriptDir%\data\temp\*.xml
-Fn_CreateArchiveDir(TodaysFile)
+Fn_CreateArchiveDir(TodaysFile) ;This function archives the supplied argument/file and also returns the path of the archive parent folder
 
 
-;Invoke and set Global Variables
-StartInternalGlobals()
-
-;Read XML previously downloaded to FILECONTENTS Var
+;Read XML previously downloaded to File_TB_XML Var
 FileRead, File_TB_XML, %A_ScriptDir%\data\temp\Today_XML.xml
 StringReplace, File_TB_XML, File_TB_XML, `<,`n`<, All
 FileAppend, %File_TB_XML%, %A_ScriptDir%\data\temp\ConvertedXML.txt
-FileContents = ;Free the memory after being written to file.
+File_TB_XML = ;Free the memory after being written to file.
 
 
-										;This does nothing but count the number of lines to be used in progress bar calculations
+										;This counts the number of lines to be used in progress bar calculations and compiles all of RacingChannels HTML to a single file
 										The_EquibaseTotalTXTLines := 0
 										Loop, read, %A_ScriptDir%\data\temp\ConvertedXML.txt
 										{
@@ -93,13 +90,17 @@ FileContents = ;Free the memory after being written to file.
 										}
 
 										The_RCTotalTXTLines := 0
-										Loop, %A_ScriptDir%\data\temp\RacingChannel\*.*
+										TodaysFile_RC = %A_ScriptDir%\data\temp\RacingChannelHTML.html
+										Loop, %A_ScriptDir%\data\temp\RacingChannel\*.*, 0, 1 ;Recurse into all subfolders (TBred and Harness)
 										{
+										FileRead, MemoryFile, %A_LoopFileFullPath%
+										FileAppend, %MemoryFile%, %TodaysFile_RC%
 											Loop, Read, %A_LoopFileFullPath%
 											{
 											The_RCTotalTXTLines += 1
 											}
 										}
+										Fn_CreateArchiveDir(TodaysFile_RC)
 
 	;Read Each line of Converted XML. Valued Information is extracted put into an array
 	;THIS NEEDS TO BE RE-WRITTEN USING REGULAR EXPRESSIONS
@@ -138,7 +139,7 @@ FileContents = ;Free the memory after being written to file.
 		The_EntryNumber := The_RaceNumber * 1000 + The_EntryNumber
 		}
 		
-		REG = <change_description>(\S+)
+		REG = <change_description>(\w+)
 		RegexMatch(ReadLine, REG, RE_Scratch)
 		If (RE_Scratch1 = "Scratched")
 		{
@@ -248,6 +249,10 @@ Loop % LV_GetCount()
     LV_GetText(Buffer_ProgramNumber, A_Index, 1)
 	LV_GetText(Buffer_Status, A_Index, 2)
 	LV_GetText(Buffer_Name, A_Index, 4) ;Commonly the Horsename but sometimes not. 
+	If (InStr(Buffer_Name,"■"))
+	{
+	LVA_SetCell("GUI_Listview", A_Index, 0, "f0f0f0") ;Set to grey if this is a track header
+	}
     If (Buffer_ProgramNumber != "")
 	{
 		If(Buffer_Status != "")
@@ -277,7 +282,6 @@ Loop % LV_GetCount()
 		LVA_SetCell("GUI_Listview", A_Index, 0, "red") ;Set to Red if it is a "RE-LIVENED" Horse
 		}
 	}
-
 }
 
 ;Fix Default Size of all Columns in Listview
@@ -291,7 +295,7 @@ LV_ModifyCol(6, 100)
 ;Refresh the Listview colors (Redraws the GUI Control
 LVA_Refresh("GUI_Listview")
 OnMessage("0x4E", "LVA_OnNotify")
-;Guicontrol, +ReDraw, GUI_Listview
+Guicontrol, +ReDraw, GUI_Listview
 
 ;Send Runner numbers to GUI
 	If (Data_UnHandledRunners = 0)
@@ -705,8 +709,10 @@ FormatTime, CurrentMonth,, MMMM
 FormatTime, CurrentMonthNumber,, MM
 FormatTime, CurrentDay,, dd
 
-FileCreateDir, \\tvgops\pdxshares\wagerops\Tools\Scratch-Detector\data\archive\%CurrentYear%\%CurrentMonthNumber%-%CurrentMonth%\%CurrentDay%\
-FileCopy, %para_FileToArchive%, \\tvgops\pdxshares\wagerops\Tools\Scratch-Detector\data\archive\%CurrentYear%\%CurrentMonthNumber%-%CurrentMonth%\%CurrentDay%, 1
+l_ArchivePath = \\tvgops\pdxshares\wagerops\Tools\Scratch-Detector\data\archive\%CurrentYear%\%CurrentMonthNumber%-%CurrentMonth%\%CurrentDay%\
+FileCreateDir, %l_ArchivePath%
+FileCopy, %para_FileToArchive%, %l_ArchivePath%, 1
+Return %l_ArchivePath%
 }
 
 
@@ -977,7 +983,7 @@ DoubleClick:
 			LV_GetText(Buffer_ProgramNumber, A_Index, 1)
 			LV_GetText(Buffer_Race, A_Index, 5)
 				;Reset ignore flag if a new track is loaded into memory
-				If (InStr("■",Buffer_Name) && Ignore_Bool = False)
+				If (InStr("■",Buffer_Name) && Ignore_Bool = False) ;NOTE - Note sure why but leave "■" as the haystack
 				{
 				Ignore_Bool := True
 				}
