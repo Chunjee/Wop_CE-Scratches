@@ -10,7 +10,7 @@
 ;Compile Options
 ;~~~~~~~~~~~~~~~~~~~~~
 StartUp()
-Version_Name = v0.24
+Version_Name = v0.24.1
 
 ;Dependencies
 #Include %A_ScriptDir%\Functions
@@ -295,7 +295,7 @@ LV_ModifyCol(6, 100)
 ;Refresh the Listview colors (Redraws the GUI Control
 LVA_Refresh("GUI_Listview")
 OnMessage("0x4E", "LVA_OnNotify")
-Guicontrol, +ReDraw, GUI_Listview
+;Guicontrol, +ReDraw, GUI_Listview
 
 ;Send Runner numbers to GUI
 	If (Data_UnHandledRunners = 0)
@@ -305,7 +305,7 @@ Guicontrol, +ReDraw, GUI_Listview
 	If (Data_UnHandledRunners > 0)
 	{
 	GuiControl, +cff7f27, GUI_UnhandledScratches,
-	Sb_FlashGUI()
+	;Sb_FlashGUI()
 	}
 	If (Data_UnHandledRunners > 4)
 	{
@@ -462,7 +462,7 @@ Fn_ParseRacingChannel(para_Array, para_FileDir)
 			TrackName := RegExFound
 			}
 		;RaceNumber
-		RegExFound := Fn_QuickRegEx(A_LoopReadLine,"A name=race(\d+)>")
+		RegExFound := Fn_QuickRegEx(A_LoopReadLine,"<B><U>(\d+)")
 			If (RegExFound != "null")
 			{
 			RaceNumber := RegExFound
@@ -484,21 +484,18 @@ Fn_ParseRacingChannel(para_Array, para_FileDir)
 		;Status
 		REG = scratched (\(part of entry\))
 		RegExFound := Fn_QuickRegEx(A_LoopReadLine,REG)
-			If (RegExFound != "null")
+			If (RegExFound != "null" && HorseName != "")
 			{
 			HorseStatus := 1
-			}
-		;Write Out
-		REG = (<TD><\/TD>)
-		RegExFound := Fn_QuickRegEx(A_LoopReadLine,REG)
-			If (RegExFound != "null" && HorseName != "" && HorseStatus = 1)
-			{
+			
 			X += 1
 			para_Array[X,"TrackName"] := TrackName
 			para_Array[X,"RaceNumber"] := RaceNumber
 			para_Array[X,"ProgramNumber"] := ProgramNumber
 			para_Array[X,"HorseName"] := HorseName
 			para_Array[X,"Status"] := HorseStatus
+			
+			RaceNumber := "", ProgramNumber := "", HorseName := "" , HorseStatus := "" ;Clear all vars
 			
 				MatchFound := 0
 				Loop, % AllHorses_Array.MaxIndex()
@@ -836,9 +833,9 @@ Gui, Font, s30 w700, Arial
 Gui, Add, Text, x360 y24 w42 +Right vGUI_UnhandledScratches gMsgUnhandledScratches,
 Gui, Add, Text, x410 y24, /
 Gui, Font, s20 w700, Arial
-Gui, Add, Text, x430 y24 vGUI_TotalScratches gMsgTotalScratches,
-Gui, Font, s12 w10, Arial
-Gui, Add, Text, x464 y46 vGUI_EffectedEntries gMsgEffectedEntries,
+Gui, Add, Text, x430 y24 w30 vGUI_TotalScratches gMsgTotalScratches,
+Gui, Font, s10 w10, Arial
+Gui, Add, Text, x434 y54 w30 vGUI_EffectedEntries gMsgEffectedEntries,
 ;Gui, Font, s30 w700, Arial
 
 Gui, Font, s6 w10, Arial
@@ -883,7 +880,7 @@ Msgbox, This shows the number of coupled entries that have not been handled
 Return
 
 MsgEffectedEntries:
-Msgbox, This shows the number of coupled entries effected by scratches
+Msgbox, This shows the number of coupled entries effected by scratches (1,1A,1X are considered a single entry)
 Return
 
 ;Options
