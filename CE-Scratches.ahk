@@ -10,7 +10,7 @@
 ;Compile Options
 ;~~~~~~~~~~~~~~~~~~~~~
 StartUp()
-Version_Name = v0.24.1
+Version_Name = v0.24.3
 
 ;Dependencies
 #Include %A_ScriptDir%\Functions
@@ -225,10 +225,10 @@ Loop, % RacingChannel_Array.MaxIndex()
 			LV_AddBlank()
 			LV_AddBlank()
 			LV_AddBlank()
-			LV_Add("","","","","Harness / Racing Channel Only Scratches","")
+			LV_Add("","","","","■ Harness / Racing Channel Only Scratches","")
 			RCOnly_Scratch := 2
 			}
-	LV_Add("",RacingChannel_Array[A_Index,"ProgramNumber"],"Scratched","",RacingChannel_Array[A_Index,"HorseName"] . " at " Fn_TrackTitle(RacingChannel_Array[A_Index,"TrackName"]),RacingChannel_Array[A_Index,"RaceNumber"])
+	LV_Add("",RacingChannel_Array[A_Index,"ProgramNumber"],"Scratched","",RacingChannel_Array[A_Index,"HorseName"] . " at " RacingChannel_Array[A_Index,"TrackName"],RacingChannel_Array[A_Index,"RaceNumber"])
 	}
 }
 
@@ -454,14 +454,13 @@ Fn_ParseRacingChannel(para_Array, para_FileDir)
 	Fn_GUI_UpdateProgress(A_Index,The_RCTotalTXTLines)
 		Loop, Read, %A_LoopFileFullPath%
 		{
-		;Msgbox, %A_LoopReadLine%
 		;TrackName
 		RegExFound := Fn_QuickRegEx(A_LoopReadLine,"<TITLE>(\D+) Changes<\/TITLE>")
 			If (RegExFound != "null")
 			{
 			TrackName := RegExFound
 			}
-		;RaceNumber
+		;RaceNumber    ;<A name=race(\d+) also works
 		RegExFound := Fn_QuickRegEx(A_LoopReadLine,"<B><U>(\d+)")
 			If (RegExFound != "null")
 			{
@@ -495,7 +494,7 @@ Fn_ParseRacingChannel(para_Array, para_FileDir)
 			para_Array[X,"HorseName"] := HorseName
 			para_Array[X,"Status"] := HorseStatus
 			
-			RaceNumber := "", ProgramNumber := "", HorseName := "" , HorseStatus := "" ;Clear all vars
+			ProgramNumber := "", HorseName := "" , HorseStatus := "" ;Clear all vars
 			
 				MatchFound := 0
 				Loop, % AllHorses_Array.MaxIndex()
@@ -793,7 +792,7 @@ FileDelete, \\tvgops\pdxshares\wagerops\Tools\Scratch-Detector\data\archive\DBs\
 StartUp()
 {
 #NoEnv
-;#NoTrayIcon
+#NoTrayIcon
 #SingleInstance force
 #MaxThreads 1
 }
@@ -963,7 +962,6 @@ DoubleClick:
 		SeenHorses_Array[X2,"HorseName"] := RowText
 		Fn_ExportArray()
 		}
-		
 		
 ;Put all Shift note formatted Scratches onto the clipboard if user double-clicked a '■ TrackName'
 		If (InStr(RowText,"■"))
