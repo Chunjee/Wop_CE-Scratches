@@ -1,8 +1,8 @@
 ﻿;/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\
 ; Description
 ;\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/
-; Downloads and Parses Equibase XML into an Excel spreadsheet. Then reads the 'database' looking for coupled entry scratches.
-; For Harness tracks, raw HTML is downloaded and parsed into Excel the same way from Racing Channel.
+; Downloads and Parses Equibase XML and all Racing Channel change pages into Arrays. 
+; Then reads them looking for coupled entry scratches, pool changes, or Re-livened runners.
 ; 
 
 
@@ -10,7 +10,7 @@
 ;Compile Options
 ;~~~~~~~~~~~~~~~~~~~~~
 StartUp()
-Version_Name = v0.24.3
+Version_Name = v0.25
 
 ;Dependencies
 #Include %A_ScriptDir%\Functions
@@ -71,8 +71,8 @@ Sb_DownloadAllRacingChannel()
 
 
 ; Move Equibase's xml to Archive
-TodaysFile = %A_ScriptDir%\data\temp\*.xml
-Fn_CreateArchiveDir(TodaysFile) ;This function archives the supplied argument/file and also returns the path of the archive parent folder
+TodaysFile_Equibase = %A_ScriptDir%\data\temp\*.xml
+Fn_CreateArchiveDir(TodaysFile_Equibase) ;This function archives the supplied argument/file and also returns the path of the archive parent folder
 
 
 ;Read XML previously downloaded to File_TB_XML Var
@@ -80,6 +80,9 @@ FileRead, File_TB_XML, %A_ScriptDir%\data\temp\Today_XML.xml
 StringReplace, File_TB_XML, File_TB_XML, `<,`n`<, All
 FileAppend, %File_TB_XML%, %A_ScriptDir%\data\temp\ConvertedXML.txt
 File_TB_XML = ;Free the memory after being written to file.
+
+;Assign Var to the file
+TodaysFile_Equibase = %A_ScriptDir%\data\temp\ConvertedXML.txt
 
 
 										;This counts the number of lines to be used in progress bar calculations and compiles all of RacingChannels HTML to a single file
@@ -103,8 +106,7 @@ File_TB_XML = ;Free the memory after being written to file.
 										Fn_CreateArchiveDir(TodaysFile_RC)
 
 	;Read Each line of Converted XML. Valued Information is extracted put into an array
-	;THIS NEEDS TO BE RE-WRITTEN USING REGULAR EXPRESSIONS
-	Loop, Read, %A_ScriptDir%\data\temp\ConvertedXML.txt
+	Loop, Read, %TodaysFile_Equibase%
 	{
 	
 	ReadLine := A_LoopReadLine
@@ -179,7 +181,6 @@ File_TB_XML = ;Free the memory after being written to file.
 		The_ScratchGate := 0
 		}
 
-
 	;TotalWrittentoExcel += 1
 	;vProgressBar := 100 * (TotalWrittentoExcel / )
 	Fn_GUI_UpdateProgress(A_Index,The_EquibaseTotalTXTLines)
@@ -194,8 +195,8 @@ Dir_TBred = %A_ScriptDir%\data\temp\RacingChannel\TBred\*.PHP
 Dir_Harness = %A_ScriptDir%\data\temp\RacingChannel\Harness\*.PHP
 
 ;Parse Dirs into the array; also compares to AllHorses_Array trying to fix matches
-Fn_ParseRacingChannel(RacingChannel_Array, Dir_TBred)
-Fn_ParseRacingChannel(RacingChannel_Array, Dir_Harness)
+Fn_ParseRacingChannel(RacingChannel_Array, TodaysFile_RC)
+;Fn_ParseRacingChannel(RacingChannel_Array, Dir_Harness)
 
 
 		;UNUSED SORTING
@@ -212,23 +213,33 @@ Fn_ParseRacingChannel(RacingChannel_Array, Dir_Harness)
 ;Look through the provided array and send scratched CE entries to Listview for User to see
 Fn_ReadtoListview(AllHorses_Array)
 
+;Add three blank lines between Equibase and Racing Channel Sections 
+LV_AddBlank(3)
+
 ;Now look through the RacingChannel Array for any CE entries that may have been missed. Also handles Harness Scratches
 RCOnly_Scratch = 0
 Loop, % RacingChannel_Array.MaxIndex()
 {
+RCOnly_Scratch += 1
 	If (RacingChannel_Array[A_Index,"OtherScratch"] = 1)
 	{
-	RCOnly_Scratch += 1
-	;The_EffectedEntries += 1 ;Problematic
+		;RCOnly_Scratch += 1 ;Original location, now above
 		If (RCOnly_Scratch = 1) ;Simple duplicate
 			{
-			LV_AddBlank()
-			LV_AddBlank()
-			LV_AddBlank()
-			LV_Add("","","","","■ Harness / Racing Channel Only Scratches","")
+			LV_Add("","","","","■ Harness / Racing Channel Only","")
 			RCOnly_Scratch := 2
 			}
 	LV_Add("",RacingChannel_Array[A_Index,"ProgramNumber"],"Scratched","",RacingChannel_Array[A_Index,"HorseName"] . " at " RacingChannel_Array[A_Index,"TrackName"],RacingChannel_Array[A_Index,"RaceNumber"])
+	}
+	
+	If (RacingChannel_Array[A_Index,"AddedWager"] != "")
+	{
+		If (RCOnly_Scratch = 1) ;Simple duplicate
+			{
+			LV_Add("","","","","■ Harness / Racing Channel Only","")
+			RCOnly_Scratch := 2
+			}
+	LV_Add("","","","","► " . RacingChannel_Array[A_Index,"AddedWager"] . " added at " RacingChannel_Array[A_Index,"TrackName"],RacingChannel_Array[A_Index,"RaceNumber"])
 	}
 }
 
@@ -252,6 +263,10 @@ Loop % LV_GetCount()
 	If (InStr(Buffer_Name,"■"))
 	{
 	LVA_SetCell("GUI_Listview", A_Index, 0, "f0f0f0") ;Set to grey if this is a track header
+	}
+	If (InStr(Buffer_Name, "►"))
+	{
+	LVA_SetCell("GUI_Listview", A_Index, 0, "b7ffb7") ;Set to light green if this is an added wager pool
 	}
     If (Buffer_ProgramNumber != "")
 	{
@@ -441,85 +456,102 @@ StringUpper, l_ReturnValue, para_String, T
 Return % "■ " . l_ReturnValue
 }
 
-Fn_ParseRacingChannel(para_Array, para_FileDir)
+Fn_ParseRacingChannel(para_Array, para_File)
 {
-
 	Global AllHorses_Array
 	Global The_RCTotalTXTLines
 	X := 0
 	
-	;Read each RacingChannel file
-	Loop, %para_FileDir%
+	;Read eachline RacingChannel file
+	Loop, Read, %para_File%
 	{
 	Fn_GUI_UpdateProgress(A_Index,The_RCTotalTXTLines)
-		Loop, Read, %A_LoopFileFullPath%
+	;TrackName
+	RegExFound := Fn_QuickRegEx(A_LoopReadLine,"<TITLE>(\D+) Changes<\/TITLE>")
+		If (RegExFound != "null")
 		{
-		;TrackName
-		RegExFound := Fn_QuickRegEx(A_LoopReadLine,"<TITLE>(\D+) Changes<\/TITLE>")
-			If (RegExFound != "null")
-			{
-			TrackName := RegExFound
-			}
-		;RaceNumber    ;<A name=race(\d+) also works
-		RegExFound := Fn_QuickRegEx(A_LoopReadLine,"<B><U>(\d+)")
-			If (RegExFound != "null")
-			{
-			RaceNumber := RegExFound
-			}
-		;ProgramNumber
-		REG = <TD WIDTH="20"><B>(\w+)<
-		RegExFound := Fn_QuickRegEx(A_LoopReadLine,REG)
-			If (RegExFound != "null")
-			{
-			ProgramNumber := RegExFound
-			}
-		;HorseName
-		REG = WIDTH="150"><B>(\D+)<\/B>
-		RegExFound := Fn_QuickRegEx(A_LoopReadLine,REG)
-			If (RegExFound != "null")
-			{
-			HorseName := RegExFound
-			}
-		;Status
-		REG = scratched (\(part of entry\))
-		RegExFound := Fn_QuickRegEx(A_LoopReadLine,REG)
-			If (RegExFound != "null" && HorseName != "")
-			{
-			HorseStatus := 1
-			
-			X += 1
-			para_Array[X,"TrackName"] := TrackName
-			para_Array[X,"RaceNumber"] := RaceNumber
-			para_Array[X,"ProgramNumber"] := ProgramNumber
-			para_Array[X,"HorseName"] := HorseName
-			para_Array[X,"Status"] := HorseStatus
-			
-			ProgramNumber := "", HorseName := "" , HorseStatus := "" ;Clear all vars
-			
-				MatchFound := 0
-				Loop, % AllHorses_Array.MaxIndex()
-				{
-					If (AllHorses_Array[A_Index,"HorseName"] = para_Array[X,"HorseName"])
-					{
-					AllHorses_Array[A_Index,"RCConfirm"] := "/"
-					MatchFound := 1
-					}
-					;Else ;switch back to this if a binary system is needed
-					;{
-					;AllHorses_Array[A_Index,"RCConfirm"] := 0
-					;}
-				}
-				If (MatchFound != 1)
-				{
-				para_Array[X,"OtherScratch"] := 1
-				}
-			HorseStatus := 0
-			}
-
+		TrackName := RegExFound
 		}
-
+	;RaceNumber    ;<A name=race(\d+) also works
+	RegExFound := Fn_QuickRegEx(A_LoopReadLine,"<B><U>(\d+)")
+		If (RegExFound != "null")
+		{
+		RaceNumber := RegExFound
+		}
+	;ProgramNumber
+	REG = <TD WIDTH="20"><B>(\w+)<
+	RegExFound := Fn_QuickRegEx(A_LoopReadLine,REG)
+		If (RegExFound != "null")
+		{
+		ProgramNumber := RegExFound
+		}
+	;HorseName
+	REG = WIDTH="150"><B>(\D+)<\/B>
+	RegExFound := Fn_QuickRegEx(A_LoopReadLine,REG)
+		If (RegExFound != "null")
+		{
+		HorseName := RegExFound
+		}
+	
+	;Wagering Added		
+	Options_ShowAddedWagers = 1
+	If (Options_ShowAddedWagers = 1)
+	{
+		;Superfecta
+		If (InStr(A_LoopReadLine,"superfecta") && InStr(A_LoopReadLine,"add"))
+		{
+		X++
+		para_Array[X,"TrackName"] := TrackName
+		para_Array[X,"RaceNumber"] := RaceNumber
+		para_Array[X,"AddedWager"] := "Superfecta"
+		}
+		
+		;Trifecta
+		If (InStr(A_LoopReadLine,"trifecta") && InStr(A_LoopReadLine,"add"))
+		{
+		X++
+		para_Array[X,"TrackName"] := TrackName
+		para_Array[X,"RaceNumber"] := RaceNumber
+		para_Array[X,"AddedWager"] := "Trifecta"
+		}
 	}
 	
+	;Status
+	REG = scratched (\(part of entry\))
+	RegExFound := Fn_QuickRegEx(A_LoopReadLine,REG)
+		If (RegExFound != "null" && HorseName != "")
+		{
+		HorseStatus := 1
+		
+		X++
+		para_Array[X,"TrackName"] := TrackName
+		para_Array[X,"RaceNumber"] := RaceNumber
+		para_Array[X,"ProgramNumber"] := ProgramNumber
+		para_Array[X,"HorseName"] := HorseName
+		para_Array[X,"Status"] := HorseStatus
+		
+		ProgramNumber := "", HorseName := "" , HorseStatus := "" ;Clear all vars
+		
+			MatchFound := 0
+			Loop, % AllHorses_Array.MaxIndex()
+			{
+				If (AllHorses_Array[A_Index,"HorseName"] = para_Array[X,"HorseName"])
+				{
+				AllHorses_Array[A_Index,"RCConfirm"] := "/"
+				MatchFound := 1
+				}
+				;Else ;switch back to this if a binary system is needed
+				;{
+				;AllHorses_Array[A_Index,"RCConfirm"] := 0
+				;}
+			}
+			If (MatchFound != 1)
+			{
+			para_Array[X,"OtherScratch"] := 1
+			}
+		HorseStatus := 0
+		}
+	}
 }
 
 
@@ -574,7 +606,7 @@ ScratchCheck := 0
 			{
 				If (The_EffectedEntries != 1)
 				{
-				LV_AddBlank()
+				LV_AddBlank(1)
 				}
 			LV_Add("","","","",Fn_TrackTitle(Obj[1,"TrackName"]),"")
 			Current_Track := Obj[1,"TrackName"]
@@ -646,6 +678,7 @@ FirstHorse_Toggle := 1
 	CE_Array := []
 	ArrX := 0
 	ReRead = 1
+	;This Goto can be replaced if a second ArrX variable is used instead of A_Index. Later perhaps.
 	Goto ReRead
 	}
 
@@ -653,9 +686,11 @@ FirstHorse_Toggle := 1
 
 
 
-LV_AddBlank()
+LV_AddBlank(para_number)
 {
-LV_Add("", "", "", "", "")
+	Loop, %para_number% {
+	LV_Add("", "", "", "", "")
+	}
 }
 
 
