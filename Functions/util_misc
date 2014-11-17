@@ -1,0 +1,51 @@
+﻿; Version 0.1 by
+;_________  __                   __             
+;\    ___ \|  |__  __ __  ____  |__| ____  ____ 
+;/    \  \/|  |  \|  |  \/    \ |  |/ __ \/ __ \
+;\     \___|      \  |  /   |  \|  |  ___|  ___|
+; \________/___|  /____/|_/\|__/|  |\____/_____/
+;               \/        \________|     Chunjee
+; This software is copyright or something 2013 - DownloadMob.com - all rights reserved.
+; Do not redistribute or release executables.
+
+
+;/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\
+; Functions
+;\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/
+
+;Quick RegEx for quick matches. Remember to include match parenthesis (\d+).+ Returns matched value
+;Fn_QuickRegEx(A_LoopRealLine,"(\d+)")
+Fn_QuickRegEx(para_Input,para_RegEx)
+{
+	RegExMatch(para_Input, para_RegEx, RE_Match)
+	If (RE_Match1 != "")
+	{
+	Return %RE_Match1%
+	}
+Return "null"
+}
+
+
+
+;/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\
+; Subroutines
+;\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/
+
+;Allows for remote shutdown
+Sb_RemoteShutDown()
+{
+SetTimer, RemoteShutDown, 2520000 ;42 mins
+RemoteShutDown:
+l_Shutdownfile = %A_ScriptDir%\shutdown.cmd
+	If (FileExist(l_Shutdownfile)) {
+	ExitApp
+	}
+Return
+}
+
+;Debug_Msg is for showing a variable or two instead of msgbox
+Debug_Msg(message)
+{
+Progress, 100, %message%, , , 
+;Arial
+}

@@ -10,7 +10,7 @@
 ;Compile Options
 ;~~~~~~~~~~~~~~~~~~~~~
 StartUp()
-Version_Name = v0.25
+Version_Name = v0.25.1
 
 ;Dependencies
 #Include %A_ScriptDir%\Functions
@@ -20,12 +20,14 @@ Version_Name = v0.25
 
 ;For Debug Only
 #Include util_arrays
+#Include util_misc
 
 ;/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\
 ;PREP AND STARTUP
 ;\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/
 
 Sb_GlobalNameSpace()
+Sb_RemoteShutDown() ;Allows for remote shutdown
 ;###Invoke and set Global Variables
 StartInternalGlobals()
 
@@ -217,29 +219,21 @@ Fn_ReadtoListview(AllHorses_Array)
 LV_AddBlank(3)
 
 ;Now look through the RacingChannel Array for any CE entries that may have been missed. Also handles Harness Scratches
-RCOnly_Scratch = 0
-Loop, % RacingChannel_Array.MaxIndex()
-{
-RCOnly_Scratch += 1
-	If (RacingChannel_Array[A_Index,"OtherScratch"] = 1)
-	{
-		;RCOnly_Scratch += 1 ;Original location, now above
-		If (RCOnly_Scratch = 1) ;Simple duplicate
-			{
-			LV_Add("","","","","■ Harness / Racing Channel Only","")
-			RCOnly_Scratch := 2
-			}
-	LV_Add("",RacingChannel_Array[A_Index,"ProgramNumber"],"Scratched","",RacingChannel_Array[A_Index,"HorseName"] . " at " RacingChannel_Array[A_Index,"TrackName"],RacingChannel_Array[A_Index,"RaceNumber"])
+Loop, % RacingChannel_Array.MaxIndex() {
+
+	;Header
+	If (A_Index = 1) {
+	LV_Add("","","","","■ Harness / Racing Channel Only","")
 	}
 	
-	If (RacingChannel_Array[A_Index,"AddedWager"] != "")
-	{
-		If (RCOnly_Scratch = 1) ;Simple duplicate
-			{
-			LV_Add("","","","","■ Harness / Racing Channel Only","")
-			RCOnly_Scratch := 2
-			}
+	;Added Pools
+	If (RacingChannel_Array[A_Index,"AddedWager"] != "") {
 	LV_Add("","","","","► " . RacingChannel_Array[A_Index,"AddedWager"] . " added at " RacingChannel_Array[A_Index,"TrackName"],RacingChannel_Array[A_Index,"RaceNumber"])
+	}
+	
+	;Scratches
+	If (RacingChannel_Array[A_Index,"OtherScratch"] = 1) {
+	LV_Add("",RacingChannel_Array[A_Index,"ProgramNumber"],"Scratched","",RacingChannel_Array[A_Index,"HorseName"] . " at " RacingChannel_Array[A_Index,"TrackName"],RacingChannel_Array[A_Index,"RaceNumber"])
 	}
 }
 
@@ -310,7 +304,7 @@ LV_ModifyCol(6, 100)
 ;Refresh the Listview colors (Redraws the GUI Control
 LVA_Refresh("GUI_Listview")
 OnMessage("0x4E", "LVA_OnNotify")
-;Guicontrol, +ReDraw, GUI_Listview
+Guicontrol, +ReDraw, GUI_Listview
 
 ;Send Runner numbers to GUI
 	If (Data_UnHandledRunners = 0)
@@ -513,6 +507,15 @@ Fn_ParseRacingChannel(para_Array, para_File)
 		para_Array[X,"TrackName"] := TrackName
 		para_Array[X,"RaceNumber"] := RaceNumber
 		para_Array[X,"AddedWager"] := "Trifecta"
+		}
+		
+		;Daily Double
+		If (InStr(A_LoopReadLine,"daily double") && InStr(A_LoopReadLine,"add"))
+		{
+		X++
+		para_Array[X,"TrackName"] := TrackName
+		para_Array[X,"RaceNumber"] := RaceNumber
+		para_Array[X,"AddedWager"] := "Daily Double"
 		}
 	}
 	
@@ -791,17 +794,6 @@ Return %RE_EntryNumber%
 }
 
 
-Fn_QuickRegEx(para_Input,para_RegEx)
-{
-	RegExMatch(para_Input, para_RegEx, RE_Match)
-	If (RE_Match1 != "")
-	{
-	Return %RE_Match1%
-	}
-Return "null"
-}
-
-
 Fn_ExtractEntryNumber(para_ProgramNumber)
 {
 	RegexMatch(para_ProgramNumber, "(\d*)", RE_EntryNumber)
@@ -1024,7 +1016,7 @@ DoubleClick:
 				Continue
 				}
 				;Get the Race Number as a header, lead, thing
-				If (!InStr(Buffer_Name,"■") && Buffer_ProgramNumber = "" && Buffer_Race = "" && Ignore_Bool = False)
+				If (!InStr(Buffer_Name,"■") && Buffer_ProgramNumber = "" && Ignore_Bool = False)
 				{
 					If(Clip != "")
 					{
@@ -1139,8 +1131,6 @@ FlashGUI:
 	}
 Return
 }
-
-
 
 ;~~~~~~~~~~~~~~~~~~~~~
 ;Timers
