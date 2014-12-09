@@ -10,7 +10,8 @@
 ;Compile Options
 ;~~~~~~~~~~~~~~~~~~~~~
 StartUp()
-Version_Name = v0.25.1
+Version_Name = v0.26.2
+The_ProjectName = Scratch Detector
 
 ;Dependencies
 #Include %A_ScriptDir%\Functions
@@ -241,87 +242,8 @@ Loop, % RacingChannel_Array.MaxIndex() {
 guicontrol, Text, GUI_EffectedEntries, % The_EffectedEntries
 
 
-;Modify Race Column to fit whole title (4th column, 40 pixels/units)
-;LV_ModifyCol(3, 20)
-;LV_ModifyCol(5, 40)
-
-Data_UnHandledRunners := 0
-Data_TotalScratches := 0
-
-Loop % LV_GetCount()
-{
-	The_OuterIndex := A_Index
-    LV_GetText(Buffer_ProgramNumber, A_Index, 1)
-	LV_GetText(Buffer_Status, A_Index, 2)
-	LV_GetText(Buffer_Name, A_Index, 4) ;Commonly the Horsename but sometimes not. 
-	If (InStr(Buffer_Name,"■"))
-	{
-	LVA_SetCell("GUI_Listview", A_Index, 0, "f0f0f0") ;Set to grey if this is a track header
-	}
-	If (InStr(Buffer_Name, "►"))
-	{
-	LVA_SetCell("GUI_Listview", A_Index, 0, "b7ffb7") ;Set to light green if this is an added wager pool
-	}
-    If (Buffer_ProgramNumber != "")
-	{
-		If(Buffer_Status != "")
-		{
-		Data_TotalScratches += 1
-		}
-		
-		Loop, % SeenHorses_Array.MaxIndex()
-		{
-			If (SeenHorses_Array[A_Index,"HorseName"] = Buffer_Name)
-			{
-				If (Buffer_Status = "RE-LIVENED")
-				{
-				LVA_SetCell("GUI_Listview", The_OuterIndex, 0, "red") ;Set to Red if it is a "RE-LIVENED" Horse
-				Data_UnHandledRunners += 1
-				}
-			Continue 2
-			}
-		}
-		If(Buffer_Status = "Scratched")
-		{
-		LVA_SetCell("GUI_Listview", A_Index, 0, "ff7f27") ;Set to Orange if this horse hasn't been doubleclicked yet.
-		Data_UnHandledRunners += 1
-		}
-		If (Buffer_Status = "RE-LIVENED")
-		{
-		LVA_SetCell("GUI_Listview", A_Index, 0, "red") ;Set to Red if it is a "RE-LIVENED" Horse
-		}
-	}
-}
-
-;Fix Default Size of all Columns in Listview
-LV_ModifyCol(1)
-LV_ModifyCol(2)
-LV_ModifyCol(3, 20)
-LV_ModifyCol(4)
-LV_ModifyCol(5, 40)
-LV_ModifyCol(6, 100)
-
-;Refresh the Listview colors (Redraws the GUI Control
-LVA_Refresh("GUI_Listview")
-OnMessage("0x4E", "LVA_OnNotify")
-Guicontrol, +ReDraw, GUI_Listview
-
-;Send Runner numbers to GUI
-	If (Data_UnHandledRunners = 0)
-	{
-	GuiControl, +cBlack, GUI_UnhandledScratches,
-	}
-	If (Data_UnHandledRunners > 0)
-	{
-	GuiControl, +cff7f27, GUI_UnhandledScratches,
-	;Sb_FlashGUI()
-	}
-	If (Data_UnHandledRunners > 4)
-	{
-	GuiControl, +cRed, GUI_UnhandledScratches,
-	}
-GuiControl, Text, GUI_UnhandledScratches, % Data_UnHandledRunners
-GuiControl, Text, GUI_TotalScratches, % Data_TotalScratches
+;Read listview and color accordingly. This is a subrotine as I want to be able to do it on demand
+Sb_RecountRecolorListView()
 
 ;Warn User if there are no racingchannel files
 IfNotExist, %A_ScriptDir%\data\temp\RacingChannel\TBred\*.PHP
@@ -348,7 +270,7 @@ Return
 ^F3::
 ;For Array visualization
 SetTitleMatchMode, 2
-IfWinActive, Scratch Detector
+IfWinActive, %The_ProjectName%
 {
 Array_Gui(RacingChannel_Array)
 ;FileAppend, % Array_Print(AllHorses_Array), %A_ScriptDir%\alf.txt
@@ -365,7 +287,7 @@ Return
 
 
 $F1::
-WinActivate, Scratch Detector
+WinActivate, %The_ProjectName%
 Goto UpdateButton
 Return
 
@@ -880,9 +802,6 @@ GUI, Submit, NoHide
 ;Option_Refresh
 ;Gui, Add, ListView, x2 y70 w490 h580 Grid Checked, #|Status|Name|Race
 
-Gui, Show, x130 y90 h622 w490, Scratch Detector
-
-
 ;Menu
 Menu, FileMenu, Add, &Update Now, UpdateButton
 Menu, FileMenu, Add, R&estart`tCtrl+R, Menu_File-Restart
@@ -894,6 +813,9 @@ Menu, HelpMenu, Add, &Confluence`tCtrl+H, Menu_Confluence
 Menu, MenuBar, Add, &Help, :HelpMenu
 
 Gui, Menu, MenuBar
+
+
+Gui, Show, h600 w490, %The_ProjectName%
 Return
 
 
@@ -952,6 +874,8 @@ Return
 
 ResetDB:
 Fn_DeleteDB()
+Fn_ImportDBData()
+Sb_RecountRecolorListView()
 Return
 }
 
@@ -988,6 +912,7 @@ DoubleClick:
 		;Add the new name and Export
 		SeenHorses_Array[X2,"HorseName"] := RowText
 		Fn_ExportArray()
+		Sb_RecountRecolorListView()
 		}
 		
 ;Put all Shift note formatted Scratches onto the clipboard if user double-clicked a '■ TrackName'
@@ -1014,6 +939,10 @@ DoubleClick:
 				{
 				Ignore_Bool := False
 				Continue
+				}
+				If (InStr(Buffer_Name,"Racing Channel"))
+				{
+				Ignore_Bool := True
 				}
 				;Get the Race Number as a header, lead, thing
 				If (!InStr(Buffer_Name,"■") && Buffer_ProgramNumber = "" && Ignore_Bool = False)
@@ -1085,6 +1014,93 @@ ExitApp
 ;Subroutines
 ;~~~~~~~~~~~~~~~~~~~~~
 
+Sb_RecountRecolorListView()
+{
+global
+Data_UnHandledRunners := 0
+Data_TotalScratches := 0
+LVA_EraseAllCells("GUI_Listview")
+
+	Loop % LV_GetCount()
+	{
+		The_OuterIndex := A_Index
+		LV_GetText(Buffer_ProgramNumber, A_Index, 1)
+		LV_GetText(Buffer_Status, A_Index, 2)
+		LV_GetText(Buffer_Name, A_Index, 4) ;Commonly the Horsename but sometimes not. 
+		If (InStr(Buffer_Name,"■"))
+		{
+		LVA_SetCell("GUI_Listview", A_Index, 0, "f0f0f0") ;Set to grey if this is a track header
+		}
+		If (InStr(Buffer_Name, "►"))
+		{
+		LVA_SetCell("GUI_Listview", A_Index, 0, "b7ffb7") ;Set to light green if this is an added wager pool
+		}
+		If (Buffer_ProgramNumber != "")
+		{
+			If(Buffer_Status != "")
+			{
+			Data_TotalScratches += 1
+			}
+			
+			Loop, % SeenHorses_Array.MaxIndex()
+			{
+				If (SeenHorses_Array[A_Index,"HorseName"] = Buffer_Name)
+				{
+					If (Buffer_Status = "RE-LIVENED")
+					{
+					LVA_SetCell("GUI_Listview", The_OuterIndex, 0, "red") ;Set to Red if it is a "RE-LIVENED" Horse
+					Data_UnHandledRunners += 1
+					}
+				Continue 2
+				}
+			}
+			If(Buffer_Status = "Scratched")
+			{
+			LVA_SetCell("GUI_Listview", A_Index, 0, "ff7f27") ;Set to Orange if this horse hasn't been doubleclicked yet.
+			Data_UnHandledRunners += 1
+			}
+			If (Buffer_Status = "RE-LIVENED")
+			{
+			LVA_SetCell("GUI_Listview", A_Index, 0, "red") ;Set to Red if it is a "RE-LIVENED" Horse
+			}
+		}
+	}
+
+;Fix Default Size of all Columns in Listview
+LV_ModifyCol(1)
+LV_ModifyCol(2)
+LV_ModifyCol(3, 20)
+LV_ModifyCol(4)
+LV_ModifyCol(5, 40)
+LV_ModifyCol(6, 100)
+
+;Refresh the Listview colors (Redraws the GUI Control
+LVA_Refresh("GUI_Listview")
+OnMessage("0x4E", "LVA_OnNotify")
+Guicontrol, +ReDraw, GUI_Listview
+LVA_Refresh("GUI_Listview")
+LVA_Refresh("GUI_Listview")
+
+
+;Send Runner numbers to GUI
+	If (Data_UnHandledRunners = 0)
+	{
+	GuiControl, +cBlack, GUI_UnhandledScratches,
+	}
+	If (Data_UnHandledRunners > 0)
+	{
+	GuiControl, +cff7f27, GUI_UnhandledScratches,
+	;Sb_FlashGUI()
+	}
+	If (Data_UnHandledRunners > 4)
+	{
+	GuiControl, +cRed, GUI_UnhandledScratches,
+	}
+GuiControl, Text, GUI_UnhandledScratches, % Data_UnHandledRunners
+GuiControl, Text, GUI_TotalScratches, % Data_TotalScratches
+}
+
+
 Sb_DownloadAllRacingChannel()
 {
 ;Download TBred and Harness from RacingChannel
@@ -1117,6 +1133,7 @@ DownloadSpecified("http://tote.racingchannel.com/MEN----T.PHP","RacingChannel\TB
 		}
 	}
 }
+
 
 Sb_FlashGUI()
 {
