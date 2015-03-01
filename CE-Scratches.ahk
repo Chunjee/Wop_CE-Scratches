@@ -10,7 +10,7 @@
 ;Compile Options
 ;~~~~~~~~~~~~~~~~~~~~~
 StartUp()
-Version_Name = v0.26.2
+Version_Name = v0.28
 The_ProjectName = Scratch Detector
 
 ;Dependencies
@@ -41,14 +41,11 @@ LVA_ListViewAdd("GUI_Listview")
 ;/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\
 ;MAIN PROGRAM STARTS HERE
 ;\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/
-	If (0)
-	{
-	SetTimer, UpdateButton, %Option_Refresh%
-	}
 
 UpdateButton:
 ;Immediately disable all GUI buttons to prevent user from causing two Excel sheets from being made. 
 DiableAllButtons()
+BusyVar = 1
 Fn_GUI_UpdateProgress(1)
 ;Clear the GUI Listview (Contains all found Coupled Entries) and AllHorses Array\
 LVA_EraseAllCells("GUI_Listview")
@@ -264,6 +261,7 @@ IfNotExist, %A_ScriptDir%\data\temp\RacingChannel\TBred\*.PHP
 ;END
 Fn_GUI_UpdateProgress(100)
 EnableAllButtons()
+BusyVar = 0
 Return
 
 
@@ -765,20 +763,35 @@ A_LF := "`n"
 BuildGUI()
 {
 Global
+
+CLI_Arg = %1%
+	If (CLI_Arg = "Wallboard") {
+	guiheight := 70
+	guiwidth := 330
+	
+	guiunhandledtextx := 10
+	Gui +AlwaysOnTop
+	} Else {
+	guiheight := 600
+	guiwidth := 490
+	guiunhandledtextx := 360
+	}
+	
+	
 Gui, Add, Text, x388 y3 w100 +Right, %Version_Name%
 Gui, Add, Tab, x2 y0 w630 h700 , Scratches|Options
 ;Gui, Tab, Scratches
-Gui, Add, Button, x2 y30 w100 h30 gUpdateButton, Update
-Gui, Add, Button, x102 y30 w100 h30 gCheckResults, Check Results
-Gui, Add, Button, x202 y30 w100 h30 gShiftNotes, Open Shift Notes
-Gui, Add, Button, x302 y30 w50 h30 gResetDB, Reset DB
+Gui, Add, Button, x2 y30 w100 h30 gUpdateButton vUpdateButton, Update
+Gui, Add, Button, x102 y30 w100 h30 gCheckResults vCheckResults, Check Results
+Gui, Add, Button, x202 y30 w100 h30 gShiftNotes vShiftNotes, Open Shift Notes
+Gui, Add, Button, x302 y30 w50 h30 gResetDB vResetDB, Reset DB
 Gui, Add, ListView, x2 y70 w490 h536 Grid NoSort +ReDraw gDoubleClick vGUI_Listview, #|Status|RC|Name|Race|
 Gui, Add, Progress, x2 y60 w100 h10 vUpdateProgress, 1
 
 
 ;w200
 Gui, Font, s30 w700, Arial
-Gui, Add, Text, x360 y24 w42 +Right vGUI_UnhandledScratches gMsgUnhandledScratches,
+Gui, Add, Text, x%guiunhandledtextx% y24 w42 +Right vGUI_UnhandledScratches gMsgUnhandledScratches,
 Gui, Add, Text, x410 y24, /
 Gui, Font, s20 w700, Arial
 Gui, Add, Text, x430 y24 w30 vGUI_TotalScratches gMsgTotalScratches,
@@ -795,7 +808,7 @@ Gui, Font,
 Gui, Tab, Options
 Gui, Add, CheckBox, x10 y30 vGUI_RefreshCheckBox gAutoUpdate, Auto-Update every
 Gui, Add, edit, x122 y28 w30 vGUI_RefreshAmmount Number, 10
-Gui, Add, text, x160 y30, minutes
+Gui, Add, text, x160 y30, minutes (cannot be lower than 10 mins)
 GUI, Submit, NoHide
 
 ;Gui, Add, Button, x2 y30 w100 h30 gUpdateButton, Update
@@ -815,7 +828,22 @@ Menu, MenuBar, Add, &Help, :HelpMenu
 Gui, Menu, MenuBar
 
 
-Gui, Show, h600 w490, %The_ProjectName%
+	If (CLI_Arg = "Wallboard") {
+	GuiControl, Hide, UpdateButton
+	GuiControl, Hide, UpdateProgress
+	GuiControl, Hide, CheckResults
+	GuiControl, Hide, ShiftNotes
+	GuiControl, Hide, ResetDB
+	;Check for new scratches every 15 mins
+	SetTimer, UpdateButton, 900000
+	
+	;Update Wallboard info every 2 mins
+	SetTimer, UpdateListView, 120000
+	Sb_RecountRecolorListView()
+	} Else {
+	
+	}
+Gui, Show, h%guiheight% w%guiwidth%, %The_ProjectName%
 Return
 
 
@@ -837,14 +865,14 @@ GUI, Submit, NoHide
 RefreshMilli := 0
 RefreshMilli := Fn_QuickRegEx(GUI_RefreshAmmount,"(\d+)")
 
-	If(RefreshMilli >= 10 && GUI_RefreshCheckBox = 1)
-	{
+	If(RefreshMilli >= 10 && GUI_RefreshCheckBox = 1) {
 	RefreshMilli := RefreshMilli * 60000
 	GuiControl,, GUI_RefreshCheckBox, 1
+	SetTimer, UpdateButton, -100
+	Sleep 300
 	SetTimer, UpdateButton, %RefreshMilli%
 	}
-	If(GUI_RefreshCheckBox = 0)
-	{
+	If(GUI_RefreshCheckBox = 0) {
 	GuiControl,, GUI_RefreshCheckBox, 0
 	SetTimer, UpdateButton, Off
 	}
@@ -876,6 +904,12 @@ ResetDB:
 Fn_DeleteDB()
 Fn_ImportDBData()
 Sb_RecountRecolorListView()
+Return
+
+UpdateListView:
+	If (BusyVar != 1) {
+	Sb_RecountRecolorListView()
+	}
 Return
 }
 
