@@ -10,13 +10,14 @@
 ;Compile Options
 ;~~~~~~~~~~~~~~~~~~~~~
 StartUp()
-Version_Name = v0.28
+Version_Name = v0.29
 The_ProjectName = Scratch Detector
 
 ;Dependencies
 #Include %A_ScriptDir%\Functions
 #Include sort_arrays
 #Include json_obj
+#Include inireadwrite
 ;#Include LVA (Listed under Functions)
 
 ;For Debug Only
@@ -26,11 +27,11 @@ The_ProjectName = Scratch Detector
 ;/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\
 ;PREP AND STARTUP
 ;\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/
-
-Sb_GlobalNameSpace()
 Sb_RemoteShutDown() ;Allows for remote shutdown
-;###Invoke and set Global Variables
-StartInternalGlobals()
+Sb_SettingsImport()
+
+
+;Array_Gui(Settings)
 
 ;~~~~~~~~~~~~~~~~~~~~~
 ;GUI
@@ -43,8 +44,9 @@ LVA_ListViewAdd("GUI_Listview")
 ;\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/
 
 UpdateButton:
-;Immediately disable all GUI buttons to prevent user from causing two Excel sheets from being made. 
-DiableAllButtons()
+Sb_GlobalNameSpace() ;;Invoke and set Global Variables
+
+DiableAllButtons() ;;Immediately disable all GUI buttons to prevent user from pressing them again
 BusyVar = 1
 Fn_GUI_UpdateProgress(1)
 ;Clear the GUI Listview (Contains all found Coupled Entries) and AllHorses Array\
@@ -53,24 +55,31 @@ LV_Delete()
 LVA_Refresh("GUI_Listview")
 AllHorses_Array := []
 Current_Track := ""
-;Invoke and set Global Variables
-StartInternalGlobals()
 
 
-;Import Existing Seen Horses DB File
+;;Import Existing Seen Horses DB File
 Fn_ImportDBData()
 
-;Switch comment here for live or testing
-;Download XML of all TB Track Changes
-GetNewXML("Today_XML.xml")
-;UseExistingXML()
+	
 
-;Get Harness Track Data
-Sb_DownloadAllRacingChannel()
+	If (Settings.Misc.DemoMode = "1") {
+	UseExistingXML()
+	} Else {
+	
+	
+	;;Download XML of all TB Track Changes
+	GetNewXML("Today_XML.xml")
+	
+	
+	;;Get Harness Track Data from racing channel offered tracks
+	Sb_DownloadAllRacingChannel()
+	}
 
 
 
-; Move Equibase's xml to Archive
+
+
+;; Move Equibase's xml to Archive
 TodaysFile_Equibase = %A_ScriptDir%\data\temp\*.xml
 Fn_CreateArchiveDir(TodaysFile_Equibase) ;This function archives the supplied argument/file and also returns the path of the archive parent folder
 
@@ -85,7 +94,7 @@ File_TB_XML = ;Free the memory after being written to file.
 TodaysFile_Equibase = %A_ScriptDir%\data\temp\ConvertedXML.txt
 
 
-										;This counts the number of lines to be used in progress bar calculations and compiles all of RacingChannels HTML to a single file
+										;;This counts the number of lines to be used in progress bar calculations and compiles all of RacingChannels HTML to a single file
 										The_EquibaseTotalTXTLines := 0
 										Loop, read, %A_ScriptDir%\data\temp\ConvertedXML.txt
 										{
@@ -105,7 +114,7 @@ TodaysFile_Equibase = %A_ScriptDir%\data\temp\ConvertedXML.txt
 										}
 										Fn_CreateArchiveDir(TodaysFile_RC)
 
-	;Read Each line of Converted XML. Valued Information is extracted put into an array
+	;;Read Each line of Converted Equibase XML to an object containing every horse; their program number, scratch status, etc
 	Loop, Read, %TodaysFile_Equibase%
 	{
 	
@@ -194,7 +203,7 @@ RacingChannel_Array := []
 Dir_TBred = %A_ScriptDir%\data\temp\RacingChannel\TBred\*.PHP
 Dir_Harness = %A_ScriptDir%\data\temp\RacingChannel\Harness\*.PHP
 
-;Parse Dirs into the array; also compares to AllHorses_Array trying to fix matches
+;;Parse Racing Channel tracks into their own object; also compares to TB AllHorses_Array trying to find matches
 Fn_ParseRacingChannel(RacingChannel_Array, TodaysFile_RC)
 ;Fn_ParseRacingChannel(RacingChannel_Array, Dir_Harness)
 
@@ -210,13 +219,13 @@ Fn_ParseRacingChannel(RacingChannel_Array, TodaysFile_RC)
 ;FileAppend, %list3%, %A_ScriptDir%\allllll.txt
 
 
-;Look through the provided array and send scratched CE entries to Listview for User to see
+;;Look through the provided array and send scratched CE entries to GUI Listview for User to see
 Fn_ReadtoListview(AllHorses_Array)
 
 ;Add three blank lines between Equibase and Racing Channel Sections 
 LV_AddBlank(3)
 
-;Now look through the RacingChannel Array for any CE entries that may have been missed. Also handles Harness Scratches
+;;Now look through the RacingChannel Array for any CE entries that may have been missed. Also handles Harness Scratches
 Loop, % RacingChannel_Array.MaxIndex() {
 
 	;Header
@@ -235,14 +244,14 @@ Loop, % RacingChannel_Array.MaxIndex() {
 	}
 }
 
-;Show number of effected Races so user knows if there is a new change.
+;;Show number of effected Races so user knows if there is a new change.
 guicontrol, Text, GUI_EffectedEntries, % The_EffectedEntries
 
 
-;Read listview and color accordingly. This is a subrotine as I want to be able to do it on demand
+;;Read listview and color accordingly. This is a subroutine as I want to be able to do it on demand
 Sb_RecountRecolorListView()
 
-;Warn User if there are no racingchannel files
+;;Warn User if there are no racingchannel files
 IfNotExist, %A_ScriptDir%\data\temp\RacingChannel\TBred\*.PHP
 	{
 	Fn_MouseToolTip("No RacingChannel Data Downloaded. Login and Retry", 10)
@@ -258,7 +267,7 @@ IfNotExist, %A_ScriptDir%\data\temp\RacingChannel\TBred\*.PHP
 	
 	
 
-;END
+;;END, Re-enable all GUI buttons
 Fn_GUI_UpdateProgress(100)
 EnableAllButtons()
 BusyVar = 0
@@ -302,6 +311,11 @@ ArrX = 0
 
 AllHorses_Array := []
 Ignored_CE = 4
+
+ScratchCounter := 0
+The_EffectedEntries := 0
+
+A_LF := "`n"
 Return
 }
 
@@ -310,8 +324,9 @@ Return
 Fn_ImportDBData()
 {
 global
+
 FormatTime, A_Today, , yyyyMMdd
-FileRead, MemoryFile, \\tvgops\pdxshares\wagerops\Tools\Scratch-Detector\data\archive\DBs\%A_Today%_%Version_Name%DB.json
+FileRead, MemoryFile, % Settings.General.SharedLocation . "\data\archive\DBs\" . A_Today . "_" . Version_Name . "DB.json"
 SeenHorses_Array := Fn_JSONtooOBJ(MemoryFile)
 MemoryFile := ;Blank
 }
@@ -320,8 +335,8 @@ Fn_ExportArray()
 {
 global
 MemoryFile := Fn_JSONfromOBJ(SeenHorses_Array)
-FileDelete, \\tvgops\pdxshares\wagerops\Tools\Scratch-Detector\data\archive\DBs\%A_Today%_%Version_Name%DB.json
-FileAppend, %MemoryFile%, \\tvgops\pdxshares\wagerops\Tools\Scratch-Detector\data\archive\DBs\%A_Today%_%Version_Name%DB.json
+FileDelete, % Settings.General.SharedLocation . "\data\archive\DBs\" . A_Today . "_" . Version_Name . "DB.json"
+FileAppend, %MemoryFile%, % Settings.General.SharedLocation . "\data\archive\DBs\" . A_Today . "_" . Version_Name . "DB.json"
 MemoryFile := ;Blank
 }
 
@@ -635,7 +650,6 @@ global
 
 FileRemoveDir, %A_ScriptDir%\data\temp, 1
 FileCreateDir, %A_ScriptDir%\data\temp
-FileCreateDir, %A_ScriptDir%\data\temp\tracksrawhtml
 FileDelete, %A_ScriptDir%\data\temp\ConvertedXML.txt
 UrlDownloadToFile, http://www.equibase.com/premium/eqbLateChangeXMLDownload.cfm, %A_ScriptDir%\data\temp\%para_FileName%
 ;Copy to Archive
@@ -647,7 +661,7 @@ UseExistingXML()
 global
 
 FileDelete, %A_ScriptDir%\data\temp\ConvertedXML.txt
-FileSelectFile, XMLPath
+FileSelectFile, XMLPath,,, Please select an Equibase XML file
 FileCopy, %XMLPath%, %A_ScriptDir%\data\temp\Today_XML.xml, 1
 }
 
@@ -663,7 +677,8 @@ FormatTime, CurrentMonth,, MMMM
 FormatTime, CurrentMonthNumber,, MM
 FormatTime, CurrentDay,, dd
 
-l_ArchivePath = \\tvgops\pdxshares\wagerops\Tools\Scratch-Detector\data\archive\%CurrentYear%\%CurrentMonthNumber%-%CurrentMonth%\%CurrentDay%\
+savetime := Settings.General.SharedLocation
+l_ArchivePath = %savetime%\data\archive\%CurrentYear%\%CurrentMonthNumber%-%CurrentMonth%\%CurrentDay%\
 FileCreateDir, %l_ArchivePath%
 FileCopy, %para_FileToArchive%, %l_ArchivePath%, 1
 Return %l_ArchivePath%
@@ -728,7 +743,7 @@ Return "ERROR Retrieving Entry Number"
 Fn_DeleteDB()
 {
 global
-FileDelete, \\tvgops\pdxshares\wagerops\Tools\Scratch-Detector\data\archive\DBs\%A_Today%_%Version_Name%DB.json
+FileDelete, % Settings.General.SharedLocation . "\data\archive\DBs\" . A_Today . "_" . Version_Name . "DB.json"
 }
 
 
@@ -742,15 +757,6 @@ StartUp()
 #NoTrayIcon
 #SingleInstance force
 #MaxThreads 1
-}
-
-StartInternalGlobals()
-{
-global
-
-ScratchCounter := 0
-The_EffectedEntries := 0
-A_LF := "`n"
 }
 
 
@@ -897,7 +903,7 @@ ExitApp
 ShiftNotes:
 Today:= %A_Now%
 FormatTime, CurrentDateTime,, MMddyy
-Run \\tvgops\pdxshares\wagerops\Daily Shift Notes\%CurrentDateTime%.xlsx
+Run % Settings.General.ShiftNotesLocation . "\" . CurrentDateTime . ".xlsx"
 Return
 
 ResetDB:
@@ -908,6 +914,7 @@ Return
 
 UpdateListView:
 	If (BusyVar != 1) {
+	Fn_ImportDBData()
 	Sb_RecountRecolorListView()
 	}
 Return
@@ -1135,6 +1142,31 @@ GuiControl, Text, GUI_TotalScratches, % Data_TotalScratches
 }
 
 
+Sb_SettingsImport()
+{
+global
+
+SettingsFile = %A_ScriptDir%\Settings.ini
+	if !(Settings := Fn_IniRead(SettingsFile))
+	{
+		Settings =
+		( LTrim
+		[General]`n`r
+		SharedLocation = \\tvgops\pdxshares\wagerops\Tools\Scratch-Detector`n`r
+		ShiftNotesLocation = \\tvgops\pdxshares\wagerops\Daily Shift Notes`n`r
+		)
+		
+		File := FileOpen(SettingsFile, "w")
+		File.Write(Settings), File.Close()
+		
+		MsgBox, There was a problem reading your settings file. A new Settings.ini was generated.`nRe-running the program will now use default settings.
+		
+		ExitApp
+	}
+
+}
+
+
 Sb_DownloadAllRacingChannel()
 {
 ;Download TBred and Harness from RacingChannel
@@ -1142,6 +1174,8 @@ FileCreateDir, %A_ScriptDir%\data\temp\RacingChannel
 FileCreateDir, %A_ScriptDir%\data\temp\RacingChannel\TBred
 DownloadSpecified("http://tote.racingchannel.com/MEN----T.PHP","RacingChannel\TBred_Index.html")
 
+
+	;Download each racing channel page that is part of the index page
 	Loop, Read, %A_ScriptDir%\data\temp\RacingChannel\TBred_Index.html
 	{
 	REG = A HREF="(\S+)"><IMG SRC="\/images\/CHG.gif        ;"
