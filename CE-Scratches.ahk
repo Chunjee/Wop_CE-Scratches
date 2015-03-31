@@ -10,7 +10,7 @@
 ;Compile Options
 ;~~~~~~~~~~~~~~~~~~~~~
 StartUp()
-Version_Name = v0.29
+Version_Name = v0.29.1
 The_ProjectName = Scratch Detector
 
 ;Dependencies
@@ -61,11 +61,18 @@ Current_Track := ""
 Fn_ImportDBData()
 
 	
-
+;Do special stuff if demo mode is selected
 	If (Settings.Misc.DemoMode = "1") {
-	UseExistingXML()
+		Loop, %A_ScriptDir%\*.xml
+		{
+			If (A_LoopFileFullPath) {
+			UseExistingXML(A_LoopFileFullPath)
+			}
+		}
+	Sb_DownloadAllRacingChannel()
+	TodaysFile_RC = %A_ScriptDir%\data\temp\RacingChannelHTML.html
+	Fn_CreateArchiveDir(TodaysFile_RC)
 	} Else {
-	
 	
 	;;Download XML of all TB Track Changes
 	GetNewXML("Today_XML.xml")
@@ -76,8 +83,8 @@ Fn_ImportDBData()
 	}
 
 
-
-
+;Uncomment to select previous race data
+;UseExistingXML()
 
 ;; Move Equibase's xml to Archive
 TodaysFile_Equibase = %A_ScriptDir%\data\temp\*.xml
@@ -280,7 +287,6 @@ SetTitleMatchMode, 2
 IfWinActive, %The_ProjectName%
 {
 Array_Gui(RacingChannel_Array)
-;FileAppend, % Array_Print(AllHorses_Array), %A_ScriptDir%\alf.txt
 }
 Return
 
@@ -315,6 +321,7 @@ Ignored_CE = 4
 ScratchCounter := 0
 The_EffectedEntries := 0
 
+FileCreateDir, % Settings.General.SharedLocation . "\data\archive\DBs"
 A_LF := "`n"
 Return
 }
@@ -656,13 +663,17 @@ UrlDownloadToFile, http://www.equibase.com/premium/eqbLateChangeXMLDownload.cfm,
 FileCopy %A_ScriptDir%\data\temp\%para_FileName%, %A_ScriptDir%\data\archive\%CurrentYear%\%CurrentMonth%\%CurrentDay%\EquibaseXML_%CurrentDate%.xml, 1
 }
 
-UseExistingXML()
+UseExistingXML(para_file = "none")
 {
 global
-
+FileRemoveDir, %A_ScriptDir%\data\temp, 1
+FileCreateDir, %A_ScriptDir%\data\temp
 FileDelete, %A_ScriptDir%\data\temp\ConvertedXML.txt
-FileSelectFile, XMLPath,,, Please select an Equibase XML file
-FileCopy, %XMLPath%, %A_ScriptDir%\data\temp\Today_XML.xml, 1
+	If (!para_file = "none") {
+	FileSelectFile, XMLPath,,, Please select an Equibase XML file
+	para_file := XMLPath
+	}
+FileCopy, %para_file%, %A_ScriptDir%\data\temp\Today_XML.xml, 1
 }
 
 
