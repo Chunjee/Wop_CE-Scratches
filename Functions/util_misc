@@ -1,13 +1,4 @@
-﻿; Version 0.3 by
-;_________  __                   __             
-;\    ___ \|  |__  __ __  ____  |__| ____  ____ 
-;/    \  \/|  |  \|  |  \/    \ |  |/ __ \/ __ \
-;\     \___|      \  |  /   |  \|  |  ___|  ___|
-; \________/___|  /____/|_/\|__/|  |\____/_____/
-;               \/        \________|     Chunjee
-; This software is copyright or something 2013 - DownloadMob.com - all rights reserved.
-; Do not redistribute or release executables.
-
+﻿; Version 0.5 of all around useful functions
 
 ;/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\
 ; Functions
@@ -15,16 +6,77 @@
 
 ;Quick RegEx for quick matches. Remember to include match parenthesis (\d+).+ Returns matched value
 ;Fn_QuickRegEx(A_LoopRealLine,"(\d+)")
-Fn_QuickRegEx(para_Input,para_RegEx)
+Fn_QuickRegEx(para_Input,para_RegEx,para_ReturnValue := 1)
 {
 	RegExMatch(para_Input, para_RegEx, RE_Match)
-	If (RE_Match1 != "")
+	If (RE_Match%para_ReturnValue% != "")
 	{
-	Return %RE_Match1%
+	ReturnValue := RE_Match%para_ReturnValue%
+	Return %ReturnValue%
 	}
 Return "null"
 }
 
+Fn_ReplaceString(para_1,para_2,para_String) {
+StringReplace, l_Newstring, para_String, %para_1%, %para_2%, All
+Return l_Newstring
+}
+
+Fn_InArray(Obj,para_Search,para_Table := "")
+{
+	If (para_Table = "") {
+		Loop % Obj.MaxIndex() {
+			If(Obj[A_Index] = para_Search)	{
+			Return 1
+			}
+		}
+		;Return 0 if the search did not find any match
+		Return 0
+	}
+	
+	If (para_Table != "") {
+		Loop % Obj.MaxIndex() {
+			If(Obj[A_Index,para_Table] = para_Search)	{
+			Return 1
+			}
+		}
+		;Return 0 if the search did not find any match
+		Return 0
+	}
+Return 0
+}
+
+Fn_SearchArrayReturnOther(Obj,para_Search,para_SearchTable,para_ReturnTable)
+{
+	Loop % Obj.MaxIndex() {
+		If(Obj[A_Index,para_SearchTable] = para_Search)	{
+		Return Obj[A_Index,para_ReturnTable]
+		}
+	}
+Return "null"
+}
+
+
+Fn_SearchArrayReturnTrue(Obj,para_Search,para_SearchTable)
+{
+	Loop % Obj.MaxIndex() {
+		If(Obj[A_Index,para_SearchTable] = para_Search) {
+		Return True
+		}
+	}
+Return False
+}
+
+
+Fn_SearchSimpleArray(Obj,para_Search)
+{
+	Loop % Obj.MaxIndex() {
+		If (Obj[A_Index] = para_Search) {
+		Return True
+		}
+	}
+Return False
+}
 
 
 ;/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\
@@ -49,35 +101,4 @@ Debug_Msg(message)
 {
 Progress, 100, %message%, , , 
 ;Arial
-}
-
-
-Fn_ReplaceString(para_1,para_2,para_String) {
-StringReplace, l_Newstring, para_String, %para_1%, %para_2%, All
-Return l_Newstring
-}
-
-Fn_SearchArrayReturnOther(Obj,para_Search,para_SearchTable,para_ReturnTable)
-{
-	Loop % Obj.MaxIndex()
-	{
-		If(Obj[A_Index,para_SearchTable] = para_Search)
-		{
-		Return Obj[A_Index,para_ReturnTable]
-		}
-	}
-Return "null"
-}
-
-
-Fn_SearchArrayReturnTrue(Obj,para_Search,para_SearchTable)
-{
-	Loop % Obj.MaxIndex()
-	{
-		If(Obj[A_Index,para_SearchTable] = para_Search)
-		{
-		Return True
-		}
-	}
-Return False
 }

@@ -9,8 +9,9 @@
 ;~~~~~~~~~~~~~~~~~~~~~
 ;Compile Options
 ;~~~~~~~~~~~~~~~~~~~~~
+SetBatchLines -1 ;Go as fast as CPU will allow
 StartUp()
-Version_Name = v0.29.1
+The_VersionName = v0.29.2
 The_ProjectName = Scratch Detector
 
 ;Dependencies
@@ -70,7 +71,7 @@ Fn_ImportDBData()
 			}
 		}
 	Sb_DownloadAllRacingChannel()
-	TodaysFile_RC = %A_ScriptDir%\data\temp\RacingChannelHTML.html
+	TodaysFile_RC = %A_ScriptDir%\Data\temp\RacingChannelHTML.html
 	Fn_CreateArchiveDir(TodaysFile_RC)
 	} Else {
 	
@@ -87,30 +88,29 @@ Fn_ImportDBData()
 ;UseExistingXML()
 
 ;; Move Equibase's xml to Archive
-TodaysFile_Equibase = %A_ScriptDir%\data\temp\*.xml
+TodaysFile_Equibase = %A_ScriptDir%\Data\temp\*.xml
 Fn_CreateArchiveDir(TodaysFile_Equibase) ;This function archives the supplied argument/file and also returns the path of the archive parent folder
 
-
 ;Read XML previously downloaded to File_TB_XML Var
-FileRead, File_TB_XML, %A_ScriptDir%\data\temp\Today_XML.xml
+FileRead, File_TB_XML, %A_ScriptDir%\Data\temp\Today_XML.xml
 StringReplace, File_TB_XML, File_TB_XML, `<,`n`<, All
-FileAppend, %File_TB_XML%, %A_ScriptDir%\data\temp\ConvertedXML.txt
+FileAppend, %File_TB_XML%, %A_ScriptDir%\Data\temp\ConvertedXML.txt
 File_TB_XML = ;Free the memory after being written to file.
 
 ;Assign Var to the file
-TodaysFile_Equibase = %A_ScriptDir%\data\temp\ConvertedXML.txt
+TodaysFile_Equibase = %A_ScriptDir%\Data\temp\ConvertedXML.txt
 
 
 										;;This counts the number of lines to be used in progress bar calculations and compiles all of RacingChannels HTML to a single file
 										The_EquibaseTotalTXTLines := 0
-										Loop, read, %A_ScriptDir%\data\temp\ConvertedXML.txt
+										Loop, read, %A_ScriptDir%\Data\temp\ConvertedXML.txt
 										{
 										The_EquibaseTotalTXTLines += 1
 										}
 
 										The_RCTotalTXTLines := 0
-										TodaysFile_RC = %A_ScriptDir%\data\temp\RacingChannelHTML.html
-										Loop, %A_ScriptDir%\data\temp\RacingChannel\*.*, 0, 1 ;Recurse into all subfolders (TBred and Harness)
+										TodaysFile_RC = %A_ScriptDir%\Data\temp\RacingChannelHTML.html
+										Loop, %A_ScriptDir%\Data\temp\RacingChannel\*.*, 0, 1 ;Recurse into all subfolders (TBred and Harness)
 										{
 										FileRead, MemoryFile, %A_LoopFileFullPath%
 										FileAppend, %MemoryFile%, %TodaysFile_RC%
@@ -207,8 +207,8 @@ TodaysFile_Equibase = %A_ScriptDir%\data\temp\ConvertedXML.txt
 
 ;Create RC Array and Dirs to read from
 RacingChannel_Array := []
-Dir_TBred = %A_ScriptDir%\data\temp\RacingChannel\TBred\*.PHP
-Dir_Harness = %A_ScriptDir%\data\temp\RacingChannel\Harness\*.PHP
+Dir_TBred = %A_ScriptDir%\Data\temp\RacingChannel\TBred\*.PHP
+Dir_Harness = %A_ScriptDir%\Data\temp\RacingChannel\Harness\*.PHP
 
 ;;Parse Racing Channel tracks into their own object; also compares to TB AllHorses_Array trying to find matches
 Fn_ParseRacingChannel(RacingChannel_Array, TodaysFile_RC)
@@ -259,15 +259,15 @@ guicontrol, Text, GUI_EffectedEntries, % The_EffectedEntries
 Sb_RecountRecolorListView()
 
 ;;Warn User if there are no racingchannel files
-IfNotExist, %A_ScriptDir%\data\temp\RacingChannel\TBred\*.PHP
+IfNotExist, %A_ScriptDir%\Data\temp\RacingChannel\TBred\*.PHP
 	{
 	Fn_MouseToolTip("No RacingChannel Data Downloaded. Login and Retry", 10)
 	}
-;IfNotExist, %A_ScriptDir%\data\temp\RacingChannel\Harness\*.PHP
+;IfNotExist, %A_ScriptDir%\Data\temp\RacingChannel\Harness\*.PHP
 ;	{
 ;	Fn_MouseToolTip("No RacingChannel Data Downloaded. Login and Retry", 10)
 ;	}
-	IfNotExist, %A_ScriptDir%\data\temp\ConvertedXML.txt
+	IfNotExist, %A_ScriptDir%\Data\temp\ConvertedXML.txt
 	{
 	Fn_MouseToolTip("No EQUIBASE Data Downloaded. Check that site is accessible", 10)
 	}
@@ -321,7 +321,7 @@ Ignored_CE = 4
 ScratchCounter := 0
 The_EffectedEntries := 0
 
-FileCreateDir, % Settings.General.SharedLocation . "\data\archive\DBs"
+FileCreateDir, % Settings.General.SharedLocation . "\Data\archive\DBs"
 A_LF := "`n"
 Return
 }
@@ -333,7 +333,7 @@ Fn_ImportDBData()
 global
 
 FormatTime, A_Today, , yyyyMMdd
-FileRead, MemoryFile, % Settings.General.SharedLocation . "\data\archive\DBs\" . A_Today . "_" . Version_Name . "DB.json"
+FileRead, MemoryFile, % Settings.General.SharedLocation . "\Data\archive\DBs\" . A_Today . "_" . The_VersionName . "DB.json"
 SeenHorses_Array := Fn_JSONtooOBJ(MemoryFile)
 MemoryFile := ;Blank
 }
@@ -342,8 +342,8 @@ Fn_ExportArray()
 {
 global
 MemoryFile := Fn_JSONfromOBJ(SeenHorses_Array)
-FileDelete, % Settings.General.SharedLocation . "\data\archive\DBs\" . A_Today . "_" . Version_Name . "DB.json"
-FileAppend, %MemoryFile%, % Settings.General.SharedLocation . "\data\archive\DBs\" . A_Today . "_" . Version_Name . "DB.json"
+FileDelete, % Settings.General.SharedLocation . "\Data\archive\DBs\" . A_Today . "_" . The_VersionName . "DB.json"
+FileAppend, %MemoryFile%, % Settings.General.SharedLocation . "\Data\archive\DBs\" . A_Today . "_" . The_VersionName . "DB.json"
 MemoryFile := ;Blank
 }
 
@@ -577,7 +577,7 @@ ReRead = 0
 FirstHorse_Toggle := 1
 
 ;Loop a total time of all horses
-	Loop, % Obj.MaxIndex()
+	Loop, % Obj.MaxIndex() + 1 ;Plus one required if there is a coupled entry at the very end of the array
 	{
 	ReRead:
 		If (Obj[A_Index,"ProgramNumber"] >= 9)
@@ -585,7 +585,7 @@ FirstHorse_Toggle := 1
 		Continue
 		}
 		
-		;If this is the first horse of an entry and the horsename is not blank; put it into the CE_Array0 so that it is remembered.
+		;If this is the first horse of an entry and the horsename is not blank; put it into the CE_Array0 so that it is remembered
 		If (FirstHorse_Toggle = 1 && Obj[A_Index,"HorseName"] != "")
 		{ ;First Horse going into ARRAY~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 		CE_Array := []
@@ -600,7 +600,7 @@ FirstHorse_Toggle := 1
 		Continue
 		}
 		
-		;If the first entry number is in the current entry; AND the race number is the same; they are part of the same coupled entry. (1 is in 1A) AND tracknames match.
+		;If the first entry number is in the current entry; AND the race number is the same; they are part of the same coupled entry. (1 is in 1A) AND tracknames match
 		If (InStr(Obj[A_Index,"ProgramNumber"],CE_Array[1,"ProgramNumber"], false) && Obj[A_Index,"RaceNumber"] = CE_Array[1,"RaceNumber"] && Obj[A_Index,"TrackName"] = CE_Array[1,"TrackName"])
 		{ ;2nd HORSE FOUND!~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 		ArrX += 1
@@ -614,7 +614,7 @@ FirstHorse_Toggle := 1
 		}
 		
 		;Catchall for any other instances; Runners not a part of an entry will end up here; triggering the next Program Number to be checked.
-		If (CE_Array.MaxIndex() >= 2)
+		If (CE_Array.MaxIndex() >= 2) ;If 2 or more runners in the entry
 		{
 		Fn_WriteOutCE(CE_Array)
 		CE_Array := []
@@ -626,7 +626,6 @@ FirstHorse_Toggle := 1
 	;This Goto can be replaced if a second ArrX variable is used instead of A_Index. Later perhaps.
 	Goto ReRead
 	}
-
 }
 
 
@@ -655,25 +654,25 @@ GetNewXML(para_FileName)
 {
 global
 
-FileRemoveDir, %A_ScriptDir%\data\temp, 1
-FileCreateDir, %A_ScriptDir%\data\temp
-FileDelete, %A_ScriptDir%\data\temp\ConvertedXML.txt
-UrlDownloadToFile, http://www.equibase.com/premium/eqbLateChangeXMLDownload.cfm, %A_ScriptDir%\data\temp\%para_FileName%
+FileRemoveDir, %A_ScriptDir%\Data\temp, 1
+FileCreateDir, %A_ScriptDir%\Data\temp
+FileDelete, %A_ScriptDir%\Data\temp\ConvertedXML.txt
+UrlDownloadToFile, http://www.equibase.com/premium/eqbLateChangeXMLDownload.cfm, %A_ScriptDir%\Data\temp\%para_FileName%
 ;Copy to Archive
-FileCopy %A_ScriptDir%\data\temp\%para_FileName%, %A_ScriptDir%\data\archive\%CurrentYear%\%CurrentMonth%\%CurrentDay%\EquibaseXML_%CurrentDate%.xml, 1
+FileCopy %A_ScriptDir%\Data\temp\%para_FileName%, %A_ScriptDir%\Data\archive\%CurrentYear%\%CurrentMonth%\%CurrentDay%\EquibaseXML_%CurrentDate%.xml, 1
 }
 
 UseExistingXML(para_file = "none")
 {
 global
-FileRemoveDir, %A_ScriptDir%\data\temp, 1
-FileCreateDir, %A_ScriptDir%\data\temp
-FileDelete, %A_ScriptDir%\data\temp\ConvertedXML.txt
-	If (!para_file = "none") {
+FileRemoveDir, %A_ScriptDir%\Data\temp, 1
+FileCreateDir, %A_ScriptDir%\Data\temp
+FileDelete, %A_ScriptDir%\Data\temp\ConvertedXML.txt
+	If (para_file = "none") {
 	FileSelectFile, XMLPath,,, Please select an Equibase XML file
 	para_file := XMLPath
 	}
-FileCopy, %para_file%, %A_ScriptDir%\data\temp\Today_XML.xml, 1
+FileCopy, %para_file%, %A_ScriptDir%\Data\temp\Today_XML.xml, 1
 }
 
 
@@ -689,7 +688,7 @@ FormatTime, CurrentMonthNumber,, MM
 FormatTime, CurrentDay,, dd
 
 savetime := Settings.General.SharedLocation
-l_ArchivePath = %savetime%\data\archive\%CurrentYear%\%CurrentMonthNumber%-%CurrentMonth%\%CurrentDay%\
+l_ArchivePath = %savetime%\Data\archive\%CurrentYear%\%CurrentMonthNumber%-%CurrentMonth%\%CurrentDay%\
 FileCreateDir, %l_ArchivePath%
 FileCopy, %para_FileToArchive%, %l_ArchivePath%, 1
 Return %l_ArchivePath%
@@ -699,7 +698,7 @@ Return %l_ArchivePath%
 
 DownloadSpecified(para_FileToDownload,para_FileName)
 {
-SaveLocation = %A_ScriptDir%\data\temp\%para_FileName%
+SaveLocation = %A_ScriptDir%\Data\temp\%para_FileName%
 UrlDownloadToFile, %para_FileToDownload%, %SaveLocation%
 Return
 }
@@ -754,7 +753,7 @@ Return "ERROR Retrieving Entry Number"
 Fn_DeleteDB()
 {
 global
-FileDelete, % Settings.General.SharedLocation . "\data\archive\DBs\" . A_Today . "_" . Version_Name . "DB.json"
+FileDelete, % Settings.General.SharedLocation . "\Data\archive\DBs\" . A_Today . "_" . The_VersionName . "DB.json"
 }
 
 
@@ -767,7 +766,6 @@ StartUp()
 #NoEnv
 #NoTrayIcon
 #SingleInstance force
-#MaxThreads 1
 }
 
 
@@ -795,7 +793,7 @@ CLI_Arg = %1%
 	}
 	
 	
-Gui, Add, Text, x388 y3 w100 +Right, %Version_Name%
+Gui, Add, Text, x388 y3 w100 +Right, %The_VersionName%
 Gui, Add, Tab, x2 y0 w630 h700 , Scratches|Options
 ;Gui, Tab, Scratches
 Gui, Add, Button, x2 y30 w100 h30 gUpdateButton vUpdateButton, Update
@@ -854,8 +852,8 @@ Gui, Menu, MenuBar
 	;Check for new scratches every 15 mins
 	SetTimer, UpdateButton, 900000
 	
-	;Update Wallboard info every 2 mins
-	SetTimer, UpdateListView, 120000
+	;Update Wallboard display number every 30 seconds
+	SetTimer, UpdateListView, 30000
 	Sb_RecountRecolorListView()
 	} Else {
 	
@@ -902,7 +900,7 @@ Run http://confluence.tvg.com/pages/viewpage.action?pageId=11468878
 Return
 
 Menu_About:
-Msgbox, Checks Equibase for coupled entry scratches. Crosschecks with RacingChannel. `n%Version_Name%
+Msgbox, Checks Equibase for coupled entry scratches. Crosschecks with RacingChannel. `n%The_VersionName%
 Return
 
 Menu_File-Restart:
@@ -1181,34 +1179,34 @@ SettingsFile = %A_ScriptDir%\Settings.ini
 Sb_DownloadAllRacingChannel()
 {
 ;Download TBred and Harness from RacingChannel
-FileCreateDir, %A_ScriptDir%\data\temp\RacingChannel
-FileCreateDir, %A_ScriptDir%\data\temp\RacingChannel\TBred
+FileCreateDir, %A_ScriptDir%\Data\temp\RacingChannel
+FileCreateDir, %A_ScriptDir%\Data\temp\RacingChannel\TBred
 DownloadSpecified("http://tote.racingchannel.com/MEN----T.PHP","RacingChannel\TBred_Index.html")
 
 
 	;Download each racing channel page that is part of the index page
-	Loop, Read, %A_ScriptDir%\data\temp\RacingChannel\TBred_Index.html
+	Loop, Read, %A_ScriptDir%\Data\temp\RacingChannel\TBred_Index.html
 	{
 	REG = A HREF="(\S+)"><IMG SRC="\/images\/CHG.gif        ;"
 	Buffer_TrackCode := Fn_QuickRegEx(A_LoopReadLine,REG)
 		If (Buffer_TrackCode != "null")
 		{
-		UrlDownloadToFile, https://tote.racingchannel.com/%Buffer_TrackCode%, %A_ScriptDir%\data\temp\RacingChannel\TBred\%Buffer_TrackCode%
+		UrlDownloadToFile, https://tote.racingchannel.com/%Buffer_TrackCode%, %A_ScriptDir%\Data\temp\RacingChannel\TBred\%Buffer_TrackCode%
 		}
 
 	}
 
-	FileCreateDir, %A_ScriptDir%\data\temp\RacingChannel
-	FileCreateDir, %A_ScriptDir%\data\temp\RacingChannel\Harness
+	FileCreateDir, %A_ScriptDir%\Data\temp\RacingChannel
+	FileCreateDir, %A_ScriptDir%\Data\temp\RacingChannel\Harness
 	DownloadSpecified("http://tote.racingchannel.com/MEN----H.PHP","RacingChannel\Harness_Index.html")
 
-	Loop, Read, %A_ScriptDir%\data\temp\RacingChannel\Harness_Index.html
+	Loop, Read, %A_ScriptDir%\Data\temp\RacingChannel\Harness_Index.html
 	{
 	REG = A HREF="(\S+)"><IMG SRC="\/images\/CHG.gif        ;"
 	Buffer_TrackCode := Fn_QuickRegEx(A_LoopReadLine,REG)
 		If (Buffer_TrackCode != "null")
 		{
-		UrlDownloadToFile, https://tote.racingchannel.com/%Buffer_TrackCode%, %A_ScriptDir%\data\temp\RacingChannel\Harness\%Buffer_TrackCode%
+		UrlDownloadToFile, https://tote.racingchannel.com/%Buffer_TrackCode%, %A_ScriptDir%\Data\temp\RacingChannel\Harness\%Buffer_TrackCode%
 		}
 	}
 }
