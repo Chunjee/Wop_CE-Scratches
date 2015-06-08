@@ -11,7 +11,7 @@
 ;~~~~~~~~~~~~~~~~~~~~~
 SetBatchLines -1 ;Go as fast as CPU will allow
 StartUp()
-The_VersionName = v0.29.2
+The_VersionName = v0.29.3
 The_ProjectName = Scratch Detector
 
 ;Dependencies
@@ -124,71 +124,58 @@ TodaysFile_Equibase = %A_ScriptDir%\Data\temp\ConvertedXML.txt
 	;;Read Each line of Converted Equibase XML to an object containing every horse; their program number, scratch status, etc
 	Loop, Read, %TodaysFile_Equibase%
 	{
-	
 	ReadLine := A_LoopReadLine
-	
-		REG = horse_name="(.*)"\s
-		RegexMatch(ReadLine, REG, RE_HorseName)
-		If (RE_HorseName1 != "")
-		{
+		/*
+		The_HorseName := Fn_QuickRegEx(ReadLine,"horse_name=\x22(.+)\x22\s")
+		The_TrackName := Fn_QuickRegEx(ReadLine,"track_name=\x22(.*)\x22 id")
+		The_RaceNumber := Fn_QuickRegEx(ReadLine,"race_number=\x22(.*)\x22>")
+		RegexMatch(ReadLine, "\sprogram_number=\x22(.*)\x22>", RE_ProgramNumber)
+		*/
+		
+		RegexMatch(ReadLine, "horse_name=\x22(.+)\x22\s", RE_HorseName)
+		If (RE_HorseName1 != "") {
 		The_HorseName := RE_HorseName1
 		}
 		
-		REG = track_name="(.*)" id
-		RegexMatch(ReadLine, REG, RE_TrackName)
-		If (RE_TrackName1 != "")
-		{
+		RegexMatch(ReadLine, "track_name=\x22(.*)\x22 id", RE_TrackName)
+		If (RE_TrackName1 != "") {
 		The_TrackName := RE_TrackName1
 		}
 		
-		REG = race_number="(.*)">
-		RegexMatch(ReadLine, REG, RE_RaceNumber)
-		If (RE_RaceNumber1 != "")
-		{
+		RegexMatch(ReadLine, "race_number=\x22(.*)\x22>", RE_RaceNumber)
+		If (RE_RaceNumber1 != "") {
 		The_RaceNumber := RE_RaceNumber1
 		}
 		
-		REG = \sprogram_number="(.*)">
-		RegexMatch(ReadLine, REG, RE_ProgramNumber)
-		If (RE_ProgramNumber1 != "")
-		{
+		RegexMatch(ReadLine, "\sprogram_number=\x22(.*)\x22>", RE_ProgramNumber)
+		If (RE_ProgramNumber1 != "") {
 		The_ProgramNumber := RE_ProgramNumber1
 		The_EntryNumber := Fn_ConvertEntryNumber(RE_ProgramNumber1)
 		The_EntryNumber := The_RaceNumber * 1000 + The_EntryNumber
 		}
 		
-		REG = <change_description>(\w+)
-		RegexMatch(ReadLine, REG, RE_Scratch)
-		If (RE_Scratch1 = "Scratched")
-		{
+		RegexMatch(ReadLine, "<change_description>(\w+)", RE_Scratch)
+		If (RE_Scratch1 = "Scratched") {
 		The_ScratchGate := 1
 		}
-		If (RE_Scratch1 = "First")
-		{
+		If (RE_Scratch1 = "First") { ;"First Start Since Reported as Gelding" does not allow The_ScratchGate to be entered
 		The_ScratchGate := 0
 		}
 		
-		REG = <new_value>(Y)
-		RegexMatch(ReadLine, REG, RE_Scratch)
-		If (RE_Scratch1 != "")
-		{
-			If (The_ScratchGate = 1)
-			{
+		RegexMatch(ReadLine, "<new_value>(Y)", RE_Scratch)
+		If (RE_Scratch1 != "") {
+			If (The_ScratchGate = 1) {
 			The_ScratchStatus := 1
 			}
 		}
 		
-		REG = <new_value>(N)
-		RegexMatch(ReadLine, REG, RE_Scratch)
-		If (RE_Scratch1 != "")
-		{ ;In this case changing to a new_value of 'No' would mean the runner has been livened
+		RegexMatch(ReadLine, "<new_value>(N)", RE_Scratch)
+		If (RE_Scratch1 != "") { ;In this case changing to a new_value of 'No' would mean the runner has been livened
 		The_ScratchStatus := 9
 		}
 		
-		REG = (<\/horse>)
-		RegexMatch(ReadLine, REG, RE_Change)
-		If (RE_Change1 != "")
-		{
+		RegexMatch(ReadLine, "(<\/horse>)", RE_Change)
+		If (RE_Change1 != "") {
 		Fn_InsertHorseData()
 		The_HorseName := ""
 		The_ScratchStatus := 0
@@ -196,13 +183,8 @@ TodaysFile_Equibase = %A_ScriptDir%\Data\temp\ConvertedXML.txt
 		The_ProgramNumber := ""
 		The_ScratchGate := 0
 		}
-
-	;TotalWrittentoExcel += 1
-	;vProgressBar := 100 * (TotalWrittentoExcel / )
 	Fn_GUI_UpdateProgress(A_Index,The_EquibaseTotalTXTLines)
-	;GuiControl,, UpdateProgress, %vProgressBar%
 	}
-
 
 
 ;Create RC Array and Dirs to read from
@@ -215,9 +197,9 @@ Fn_ParseRacingChannel(RacingChannel_Array, TodaysFile_RC)
 ;Fn_ParseRacingChannel(RacingChannel_Array, Dir_Harness)
 
 
-		;UNUSED SORTING
+	;UNUSED SORTING
 ;Fn_Sort2DArray(AllHorses_Array, "EntryNumber")
-	;Fn_Sort2DArray(AllHorses_Array, "ProgramNumber")
+;Fn_Sort2DArray(AllHorses_Array, "ProgramNumber")
 ;Fn_Sort2DArray(AllHorses_Array, "RaceNumber")
 ;Fn_Sort2DArray(AllHorses_Array, "TrackName")
 
