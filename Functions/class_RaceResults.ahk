@@ -12,9 +12,6 @@ Class RaceResults {
 	
 	__New(para_Name,para_Location) {
 		this.Info_Array := []
-		this.VAR := "alf"
-		this.Info_Array["Name"] := para_Name
-		this.Info_Array["endpoint"] := "http://" . para_Location . ".tvgops.tvgnetwork.local/ivr/rest"
 	}
 	
 	
@@ -89,8 +86,7 @@ Class RaceResults {
 			If (A_Index = 1) {
 			Continue ;Skip first line
 			}
-			
-			Track := Fn_QuickRegEx(Txt_Array[A_Index],"(\w+) (\d+)")
+			Track := Fn_QuickRegEx(Txt_Array[A_Index],"([ \w]+) (\d+)")
 			Race := Fn_QuickRegEx(Txt_Array[A_Index],"(\w+) (\d+)", 2)
 			If (Track != "null") {
 				Track_Saved := Track
