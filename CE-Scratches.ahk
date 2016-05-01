@@ -52,7 +52,7 @@ UpdateButton:
 Sb_GlobalNameSpace() ;;Invoke and set Global Variables
 
 ;Do nothing between 24-05 for wallboard version only
-if (Fn_StripleadingZero(A_Hour) < 4 && CLI_Arg = "wallboard") {
+if (Fn_StripleadingZero(A_Hour) < 4 && CLI_Arg = "Wallboard") {
 	;Set gui to "-" so its more clear whats going on
 	GuiControl, Text, GUI_UnhandledScratches, -
 	Return
@@ -381,7 +381,7 @@ Fn_InsertHorseData()
 	
 	X := AllHorses_Array.MaxIndex() 
 	
-	If(The_HorseName != "") {
+	If (The_HorseName != "") {
 		X += 1
 		AllHorses_Array[X,"EntryNumber"] := The_EntryNumber ;Index
 		AllHorses_Array[X,"TrackName"] := The_TrackName
@@ -923,14 +923,14 @@ BuildGUI()
 	RefreshMilli := 0
 	RefreshMilli := Fn_QuickRegEx(GUI_RefreshAmmount,"(\d+)")
 	
-	If(RefreshMilli >= 10 && GUI_RefreshCheckBox = 1) {
+	If (RefreshMilli >= 10 && GUI_RefreshCheckBox = 1) {
 		RefreshMilli := RefreshMilli * 60000
 		GuiControl,, GUI_RefreshCheckBox, 1
 		SetTimer, UpdateButton, -100
 		Sleep 300
 		SetTimer, UpdateButton, %RefreshMilli%
 	}
-	If(GUI_RefreshCheckBox = 0) {
+	If (GUI_RefreshCheckBox = 0) {
 		GuiControl,, GUI_RefreshCheckBox, 0
 		SetTimer, UpdateButton, Off
 	}
@@ -965,7 +965,7 @@ BuildGUI()
 	Return
 	
 	UpdateListView:
-	If (BusyVar != 1) {
+	If (BusyVar != 1 && Fn_StripleadingZero(A_Hour) > 4 && CLI_Arg = "Wallboard") {
 		Fn_ImportDBData()
 		Sb_RecountRecolorListView()
 	}
