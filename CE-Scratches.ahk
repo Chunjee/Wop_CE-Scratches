@@ -12,7 +12,7 @@
 SetBatchLines -1 ;Go as fast as CPU will allow
 StartUp()
 ComObjError(False) ;Don't allow COM delays to stall out the script
-The_VersionName = v0.32.3
+The_VersionName = v0.33.0
 The_ProjectName = Scratch Detector
 
 ;Dependencies
@@ -80,9 +80,9 @@ If (Settings.Misc.DemoMode = "1") {
 			UseExistingXML(A_LoopFileFullPath)
 		}
 	}
-	Sb_DownloadAllRacingChannel()
+	;Sb_DownloadAllRacingChannel()
 	TodaysFile_RC = %A_ScriptDir%\Data\temp\RacingChannelHTML.html
-	Fn_CreateArchiveDir(TodaysFile_RC)
+	;Fn_CreateArchiveDir(TodaysFile_RC)
 } Else {
 	;;Download XML of all TB Track Changes
 	Equibase_MemoryFile := Fn_DownloadtoFile("http://www.equibase.com/premium/eqbLateChangeXMLDownload.cfm")
@@ -110,19 +110,21 @@ TodaysFile_Equibase = %A_ScriptDir%\Data\temp\ConvertedXML.txt
 TB_TXT_Array := StrSplit(Equibase_MemoryFile,"<")
 The_EquibaseTotalTXTLines := TB_TXT_Array.MaxIndex()
 
-
-The_RCTotalTXTLines := 0
-TodaysFile_RC = %A_ScriptDir%\Data\temp\RacingChannelHTML.html
-Loop, %A_ScriptDir%\Data\temp\RacingChannel\*.*, 0, 1 ;Recurse into all subfolders (TBred and Harness)
-{
-	FileRead, MemoryFile, %A_LoopFileFullPath%
-	FileAppend, %MemoryFile%, %TodaysFile_RC%
-	Loop, Read, %A_LoopFileFullPath%
+RacingChannel_bool := False ;RC shut down, skip RC stuff as best as possible
+If (RacingChannel_bool) {
+		The_RCTotalTXTLines := 0
+		TodaysFile_RC = %A_ScriptDir%\Data\temp\RacingChannelHTML.html
+	Loop, %A_ScriptDir%\Data\temp\RacingChannel\*.*, 0, 1 ;Recurse into all subfolders (TBred and Harness)
 	{
-		The_RCTotalTXTLines += 1
+		FileRead, MemoryFile, %A_LoopFileFullPath%
+		FileAppend, %MemoryFile%, %TodaysFile_RC%
+		Loop, Read, %A_LoopFileFullPath%
+		{
+			The_RCTotalTXTLines += 1
+		}
 	}
+	Fn_CreateArchiveDir(TodaysFile_RC)
 }
-Fn_CreateArchiveDir(TodaysFile_RC)
 
 
 ;Array_Gui(TB_TXT_Array)
@@ -251,16 +253,17 @@ guicontrol, Text, GUI_EffectedEntries, % The_EffectedEntries
 Sb_RecountRecolorListView()
 
 ;;Warn User if there are no racingchannel files
-IfNotExist, %A_ScriptDir%\Data\temp\RacingChannel\TBred\*.PHP
-{
-	Fn_MouseToolTip("No RacingChannel Data Downloaded. Login and Retry", 10)
-}
 
-IfNotExist, %A_ScriptDir%\Data\temp\RacingChannel\Harness\*.PHP
-{
-	Fn_MouseToolTip("No RacingChannel Data Downloaded. Login and Retry", 10)
+If (RacingChannel_bool) {
+	IfNotExist, %A_ScriptDir%\Data\temp\RacingChannel\TBred\*.PHP
+	{
+		Fn_MouseToolTip("No RacingChannel Data Downloaded. Login and Retry", 10)
+	}
+	IfNotExist, %A_ScriptDir%\Data\temp\RacingChannel\Harness\*.PHP
+	{
+		Fn_MouseToolTip("No RacingChannel Data Downloaded. Login and Retry", 10)
+	}
 }
-
 if (TB_TXT_Array.MaxIndex() < 40) {
 	Fn_MouseToolTip("EQUIBASE Data is very small. Check that site is accessible", 10)
 }
@@ -270,16 +273,6 @@ if (TB_TXT_Array.MaxIndex() < 40) {
 Fn_GUI_UpdateProgress(100)
 EnableAllButtons()
 BusyVar = 0
-Return
-
-
-^F3::
-;For Array visualization
-SetTitleMatchMode, 2
-IfWinActive, %The_ProjectName%
-{
-	Array_Gui(RacingChannel_Array)
-}
 Return
 
 ;~~~~~~~~~~~~~~~~~~~~~
@@ -1093,11 +1086,11 @@ EndGUI()
 	Gui, Destroy
 }
 
-
-Fn_MouseToolTip("No RacingChannel Data Downloaded", 10)
-MouseGetPos, M_PosX, M_PosY, WinID
-ToolTip, "No RacingChannel Data Downloaded", M_PosX, M_PosY, 1
-ToolTip
+;Racing Channel Shut Down. Do not bother the user------------------------------
+;Fn_MouseToolTip("No RacingChannel Data Downloaded", 10)
+;MouseGetPos, M_PosX, M_PosY, WinID
+;ToolTip, "No RacingChannel Data Downloaded", M_PosX, M_PosY, 1
+;ToolTip
 
 
 GuiClose:
