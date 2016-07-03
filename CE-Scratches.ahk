@@ -12,7 +12,7 @@
 SetBatchLines -1 ;Go as fast as CPU will allow
 StartUp()
 ComObjError(False) ;Don't allow COM delays to stall out the script
-The_VersionName = v0.33.0
+The_VersionName = v0.33.1
 The_ProjectName = Scratch Detector
 
 ;Dependencies
@@ -280,6 +280,9 @@ Return
 ;~~~~~~~~~~~~~~~~~~~~~
 ; See class_RaceResults
 CheckResults:
+Msgbox, This does not work now that Racing Channel shut down
+Return
+
 DiableAllButtons()
 Fn_GUI_UpdateProgress(1,100)
 RaceResultsObj := New RaceResults
@@ -834,7 +837,9 @@ BuildGUI()
 	;Gui, Tab, Scratches
 	Gui, Add, Button, x2 y30 w100 h30 gUpdateButton vUpdateButton, Update
 	Gui, Add, Button, x102 y30 w100 h30 gCheckResults vCheckResults, Check Results
-	Gui, Add, Button, x202 y30 w100 h30 gShiftNotes vShiftNotes, Open Shift Notes
+	if (Settings.General.ShiftNotesLocation != "") {
+		Gui, Add, Button, x202 y30 w100 h30 gShiftNotes vShiftNotes, Open Shift Notes
+	}
 	Gui, Add, Button, x302 y30 w50 h30 gResetDB vResetDB, Reset DB
 	Gui, Add, ListView, x2 y70 w490 h536 Grid NoSort +ReDraw gDoubleClick vGUI_Listview, #|Status|RC|Name|Race|
 	Gui, Add, Progress, x2 y60 w100 h10 vUpdateProgress, 1
@@ -932,7 +937,7 @@ BuildGUI()
 	
 	;Menu Shortcuts
 	Menu_Confluence:
-	Run http://confluence.tvg.com/pages/viewpage.action?pageId=11468878
+	Run https://betfairus.atlassian.net/wiki/display/wog/Ops+Tool+-+Scratch+Detector
 	Return
 	
 	Menu_About:

@@ -1,14 +1,4 @@
-﻿/*
-DVR%A_Index% := New DVR(Name,BaseURL)
-DVR%A_Index%.CheckStatus()
-DVR%A_Index%.CheckStatistics()
-
-;Update GUI Box of each DVR
-DVR%A_Index%.UpdateGUI()
-
-*/
-
-Class RaceResults {
+﻿Class RaceResults {
 	
 	__New(para_Name,para_Location) {
 		this.Info_Array := []
@@ -72,9 +62,9 @@ Class RaceResults {
 		TXT_Loc := A_ScriptDir . "\Data\temp\CEHorses.txt"
 		
 		;Export that pdf to TXT
-		FileCopy, %A_ScriptDir%\Data\PDFtoTEXT, %A_ScriptDir%\Data\PDFtoTEXT.exe
-		RunWait, %comspec% /c %A_ScriptDir%\Data\PDFtoTEXT.exe -raw "%PDF_Loc%" %A_ScriptDir%\Data\temp\CEHorses.txt,,Hide
-		FileDelete, %A_ScriptDir%\Data\PDFtoTEXT.exe
+		;FileCopy, %A_ScriptDir%\Data\PDFtoTEXT, %A_ScriptDir%\Data\PDFtoTEXT.exe
+		;RunWait, %comspec% /c %A_ScriptDir%\Data\PDFtoTEXT.exe -raw "%PDF_Loc%" %A_ScriptDir%\Data\temp\CEHorses.txt,,Hide
+		;FileDelete, %A_ScriptDir%\Data\PDFtoTEXT.exe
 		
 		;Load Text into an array
 		FileRead, The_MemoryFile, % TXT_Loc

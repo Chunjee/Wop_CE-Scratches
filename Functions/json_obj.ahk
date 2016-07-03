@@ -1,5 +1,4 @@
-﻿;VxE
-; Serialize an object as JSON-like text OR format a string for inclusion therein.
+﻿; Serialize an object as JSON-like text OR format a string for inclusion therein.
 ; NOTE: scientific notation is treated as a string and hexadecimal as a number.
 ; NOTE: UTF-8 sequences are encoded as-is, NOT as their intended codepoint.
 Fn_JSONfromOBJ( obj ) {

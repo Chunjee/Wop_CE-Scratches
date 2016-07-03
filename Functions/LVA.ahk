@@ -1,6 +1,5 @@
 ; ----------------------------------------------------------------------------------------------------------------------
 ; Advanced Library for ListViews
-; by Dadepp
 ; Version 1.1 (minor bugfixes)
 ; Version 1.1b (minor bugfixes, Unicode and 64bit compatible, requires AHK 1.1+) by toralf and just me
 ; http://www.autohotkey.com/forum/viewtopic.php?t=43242
