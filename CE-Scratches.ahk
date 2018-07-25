@@ -1,8 +1,9 @@
 ;/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\
 ; Description
 ;\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/
-; Renames FreePPs pdf files; then generates html for use with the normal FreePPs process.
-
+; Downloads and Parses Equibase XML and all Racing Channel change pages into Arrays. 
+; Then reads them looking for coupled entry scratches, pool changes, or Re-livened runners.
+; 
 
 
 ;~~~~~~~~~~~~~~~~~~~~~
@@ -10,761 +11,1432 @@
 ;~~~~~~~~~~~~~~~~~~~~~
 SetBatchLines -1 ;Go as fast as CPU will allow
 StartUp()
-The_ProjectName = PPS2HTML
-The_VersionName = 3.1.0
+ComObjError(False) ; Ignore http timeouts / Don't let COM delays to stall out the script
+The_VersionName = 0.39.0
+The_ProjectName = Scratch Detector
 
 ;Dependencies
 #Include %A_ScriptDir%\Functions
-#Include inireadwrite.ahk
-#Include sort_arrays.ahk
-#Include json.ahk
+
 #Include util_misc.ahk
-#Include time.ahk
-#Include wrappers.ahk
+#Include sort_arrays.ahk
+#Include json_obj.ahk
+#Include json.ahk
+#Include inireadwrite.ahk
+#Include class_RaceResults.ahk
+;#Include LVA (Listed under Functions)
+
+;For Encryption
+; #Include Crypt.ahk
 
 ;For Debug Only
 #Include util_arrays.ahk
 
-;/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\
-; StartUp
-;\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/
-
-;;Startup special global variables
-Sb_GlobalNameSpace()
-Sb_InstallFiles()
-GUI()
-
-;;Load the config file and check that it loaded completely
-settings = %A_ScriptDir%\Data\config.ini
-Fn_InitializeIni(settings)
-Fn_LoadIni(settings)
-If (Ini_Loaded != 1) {
-	Msgbox, There was a problem reading the config.ini file. %The_ProjectName% will quit. (Copy a working replacement config.ini file to the same directory as %The_ProjectName%)
-	ExitApp
-}
-
-;Just a quick conversion
-Options_TVG3PrefixURL := Fn_ReplaceString("{", "[", Options_TVG3PrefixURL)
-Options_TVG3PrefixURL := Fn_ReplaceString("}", "]", Options_TVG3PrefixURL)
-
-
-;;Import Existing Track DB File
-FileCreateDir, %Options_DBLocation%
-FileRead, The_MemoryFile, %Options_DBLocation%\DB.json
-AllTracks_Array := JSON.parse(The_MemoryFile)
-if (!AllTracks_Array) {
-	AllHorses_Array := []
-}
-The_MemoryFile := ;blank
 
 
 ;/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\
-; MAIN
+;PREP AND STARTUP
 ;\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/
-;;Loop all pdfs
-Parse:
+Sb_RemoteShutDown() ;Allows for remote shutdown
+Sb_SettingsImport()
 
-;;Clear the old html file ;added some filesize checking for added safety
-The_HMTLFile = %A_ScriptDir%\html.txt
-IfExist, %The_HMTLFile%
-{
-	FileGetSize, HTMLSize , %The_HMTLFile%, M
-	If (HTMLSize <= 2) {
-	FileDelete, %The_HMTLFile%
-	}
+;Read settings.json for global settings
+FileRead, The_MemoryFile, % A_ScriptDir "/settings.json"
+Config := JSON.parse(The_MemoryFile)
+The_MemoryFile := ""
+
+;~~~~~~~~~~~~~~~~~~~~~
+;GUI
+;~~~~~~~~~~~~~~~~~~~~~
+BuildGUI()
+LVA_ListViewAdd("GUI_Listview")
+
+;/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\
+;MAIN PROGRAM STARTS HERE
+;\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/
+UpdateButton:
+Sb_GlobalNameSpace() ;;Invoke and set Global Variables
+
+;Do nothing between 24-05 for wallboard version only
+if (Fn_StripleadingZero(A_Hour) < 4 && CLI_Arg = "Wallboard") {
+	;Set gui to "-" so its more clear whats going on
+	GuiControl, Text, GUI_UnhandledScratches, -
+	Return
 }
 
-Loop, %A_ScriptDir%\*.pdf {
-	;### All Simo Central----------------
-	;;Is this track from Simo Central? They all have "_INTER" in the filename; EX: 20140526DR(D)_INTER.pdf
-	If (Fn_QuickRegEx(A_LoopFileName,"(_INTER)") != "null") {
-		RegExMatch(A_LoopFileName, "(\d{4})(\d{2})(\d{2})(\D{2,})\(D\)_INTER", RE_SimoCentralFile)
-		;RE_1 is 2014; RE_2 is month; RE_3 is day; RE_4 is track code, usually 2 or 3 letters.
-		
-		If (RE_SimoCentralFile1 != "") {
-		;If RegEx was a successful match, Find the Ini_[Key] in config.ini
-		TrackTLA := RE_SimoCentralFile4
-		Ini_Key := Fn_FindTrackIniKey(TrackTLA)
-		
-		;Now Trackname will be 'Warwick' in the case of [GB]_WAR. Convert Spaces to Underscores
-		TrackName := %Ini_Key%_%TrackTLA%
-		TrackName := Fn_ReplaceString(" ", "_", TrackName)
-		The_Date = %RE_SimoCentralFile1%%RE_SimoCentralFile2%%RE_SimoCentralFile3%		
-			;;If [Key]_TLA has no associated track; tell user and exit
-			If (TrackName = "") {
-				Msgbox, There was no corresponding track found for %TrackTLA%, please update the config.ini file and run again. `n `n You should have something like this: `n[Key]`n %TrackTLA%=Track Name
-				Continue
-			} else {
-				Fn_InsertData(Ini_Key, TrackName, The_Date, A_LoopFileName)		
-				Continue
-			}
-		}
-	}
-
-	;### Attempt All Sky Racing--------------------------------------------
-	;;Is this track from sky racing? They all have "pp" in the filename
-	If (Fn_QuickRegEx(A_LoopFileName,"(\w{2,})pp\w{0,3}(\d{4})",2) != "null") {
-		RegExMatch(A_LoopFileName, "(\d\d)(\d\d)\.", RE_match)
-		If (RE_match1 != "") {
-			;FileCopy, %A_ScriptDir%\Data\PDFtoTEXT, %A_ScriptDir%\Data\PDFtoTEXT.exe
-			RunWait, %comspec% /c %A_ScriptDir%\Data\PDFtoTEXT.exe %A_LoopFileFullPath% %A_ScriptDir%\Data\Temp\%A_LoopFileName%.txt,,Hide
-			
-			Sleep, 200
-			;;Read the Trackname out of the converted text
-			FileRead, File_PDFTEXT, %A_ScriptDir%\Data\Temp\%A_LoopFileName%.txt
-			FileDelete, %A_ScriptDir%\Data\Temp\%A_LoopFileName%.txt
-			Country := Fn_QuickRegEx(File_PDFTEXT,"([A-Za-z ]{6,})\s+\(([A-Z][\w- ]+)\)")
-			TrackName := Fn_QuickRegEx(File_PDFTEXT,"([A-Za-z ]{6,})\s+\(([A-Z][\w- ]+)\)",2)
-			If (Country = "null") {
-				clipboard := File_PDFTEXT
-				Msgbox, couldn't extract Region from file: %A_LoopFileName%. Troubleshoot or process manually.
-				Continue
-			}
-			If (TrackName = "null") {
-				clipboard := File_PDFTEXT
-				Msgbox, couldn't extract trackname from file: %A_LoopFileName%. Troubleshoot or process manually.
-				Continue
-			}
-			If InStr(TrackName,")") {
-				clipboard := File_PDFTEXT
-				Msgbox, The trackname found contains ")" which would be a problem. Alert %The_ProjectName% author for improvements required.
-				Continue
-			}
-			If InStr(Country,"Australia") { 
-				TrackName := Country
-			}
-			;Country := Fn_ReplaceString(" ", "_", Country) ;;CHECK INTO THIS
-			TrackName := Fn_ReplaceString(" ", "_", TrackName)
-			The_Date = %tomorrowsyear%%RE_match1%%RE_match2%
-			Fn_InsertData(Country, TrackName, The_Date, A_LoopFileName)
-			Continue
-		}
-	}
-
-	;### FRANCE--------------------------------------------
-	The_TrackCode := Fn_QuickRegEx(A_LoopFileName,"(\D+)(\d{8})\D*-\${4}-RF11") ;This is catching France Tracks
-	The_Date := Fn_DateParser(Fn_QuickRegEx(A_LoopFileName,"(\D+)(\d{8})\D*-\${4}-RF11",2))
-	Ini_Key := Fn_FindTrackIniKey(The_TrackCode)
-	TrackName := %Ini_Key%_%The_TrackCode%
-	TrackName := Fn_ReplaceString(" ", "_", TrackName)
-	If (TrackName != "" && The_Date != false) { ;If NOT empty for both
-		Fn_InsertData("France", TrackName, The_Date, A_LoopFileName)
-		Continue
-	}
-
-	;### JAPAN--------------------------------------------
-	;;Is this track Japan? They all have "Japan" in the filename
-	If (InStr(A_LoopFileName, "Japan"))	{
-		;Grab the date
-		RegExMatch(A_LoopFileName, "(\d{2}).*(\d{2}).*(\d{2})", RE_JP)
-		If (RE_JP1 != "") {
-			The_Date = 20%RE_JP3%%RE_JP1%%RE_JP2%
-			The_Date = Fn_DateParser(The_Date)
-			Fn_InsertData("Japan", "Japan", The_Date, A_LoopFileName)
-			Continue
-		}
-	}
-
-	;### Other PDFs--------------------------------------------
-	;;Only handle when specified in config settings
-	If (Options_HandleExtraFiles = 1) {
-		;Skip any file already handled
-		Loop, % AllTracks_Array.MaxIndex() {
-			If (AllTracks_Array[A_Index,"FinalFilename"] = A_LoopFileName || AllTracks_Array[A_Index,"FileName"] = A_LoopFileName) { ;new and old file names
-				Continue 2
-			}
-		}
-		The_Date := Fn_DateParser(A_LoopFileName)
-		If (The_Date = 0) {
-			InputBox, The_Date, %The_ProjectName%, % "Enter the racedate for " A_LoopFileName ": `nPlease format as YYYYMMDD"
-			The_Date := Fn_DateParser(The_Date)
-		}
-		If (DateDiff(The_Date, A_Now,"days") > 30) {
-			Msgbox, % A_LoopFileName " measured as 30+ days in the future. Check the date and try again.`n`n" A_LoopFileName "was interpreted as " FormatTime(The_Date, "LongDate")
-			Continue
-		}
-		longmessage := DateDiff(The_Date, A_Now,"days") . " days from now."
-		;InputBox, UserInput_Country, %The_ProjectName%, Group/Country: (Examples- Australia, Melbourne Racing Cup, Other)
-		InputBox, UserInput_TrackName, %The_ProjectName%, % "Track Name for the file " A_LoopFileName ": `nPlease make sure the date '" The_Date "' is valid before pressing 'OK'`nYou can also fix the date in the GUI`n" longmessage
-
-		KnownInternationalTracks := "BusanSeoulAustraliaZealand"
-		UserInput_International := 1
-		If (!InStr(KnownInternationalTracks, UserInput_TrackName)) {
-			InputBox, UserInput_International, %The_ProjectName%, % "Is this track international?`n`nYes/No"
-			If (InStr(UserInput_International, "n") || InStr(UserInput_International, "N")) {
-				UserInput_International := 0
-			} ;else handled above
-		}
-		; Insert data if acceptable input
-		If (InStr("BusanSeoul", UserInput_TrackName) && UserInput_TrackName != "") {
-			Fn_InsertData("Korea", UserInput_TrackName, The_Date, A_LoopFileName, UserInput_International)
-			Continue
-		}
-		If (UserInput_TrackName != "") {
-			Fn_InsertData("Other", UserInput_TrackName, The_Date, A_LoopFileName, UserInput_International)
-			Continue
-		}
-	}
-}
-
-
-
-;Sort all Array Content by DateTrack ; No not do in descending order as this will flip the output. Sat,Fri,Thur
-;Fn_Sort2DArrayFast(AllTracks_Array, "DateTrack")
-Fn_Sort2DArray(AllTracks_Array,"DateTrack")
-Fn_Sort2DArray(AllTracks_Array,"Key")
-
-
-FormatTime, Today, , yyyyMMdd
+DiableAllButtons() ;;Immediately disable all GUI buttons to prevent user from pressing them again
+BusyVar = 1
+Fn_GUI_UpdateProgress(1)
+;Clear the GUI Listview (Contains all found Coupled Entries) and AllHorses Array\
+LVA_EraseAllCells("GUI_Listview")
 LV_Delete()
-; Array_Gui(AllTracks_Array)
-LV_Add("","","","","")
-Loop, % AllTracks_Array.MaxIndex() {
-	if (Today <= AllTracks_Array[A_Index,"Date"])
-	LV_Add("",A_Index,AllTracks_Array[A_Index,"TrackName"],AllTracks_Array[A_Index,"Key"],AllTracks_Array[A_Index,"Date"])
+LVA_Refresh("GUI_Listview")
+AllHorses_Array := []
+Current_Track := ""
+
+;;Import Existing Seen Horses DB File
+Fn_ImportDBData()
+
+
+;Do special stuff if demo mode is selected
+If (Settings.Misc.DemoMode = "1") {
+	Loop, %A_ScriptDir%\*.xml
+	{
+		If (A_LoopFileFullPath) {
+			UseExistingXML(A_LoopFileFullPath)
+		}
+	}
+	;Sb_DownloadAllRacingChannel()
+	TodaysFile_RC = %A_ScriptDir%\Data\temp\RacingChannelHTML.html
+	;Fn_CreateArchiveDir(TodaysFile_RC)
+} Else {
+	;;Download XML of all TB Track Changes
+	Equibase_MemoryFile := Fn_DownloadtoFile("http://www.equibase.com/premium/eqbLateChangeXMLDownload.cfm")
+	Fn_ArchiveMemory(Equibase_MemoryFile,"EquibaseXML.txt")
+	
+	;;Get Harness Track Data from racing channel offered tracks
+	Sb_DownloadAllRacingChannel()
 }
+
+
+;Uncomment to select previous race data
+;UseExistingXML()
+
+;Assign Var to the file
+TodaysFile_Equibase = %A_ScriptDir%\Data\temp\ConvertedXML.txt
+
+;DEPRECIATED - Read XML previously downloaded to File_TB_XML Var
+;FileDelete, % TodaysFile_Equibase
+;StringReplace, Equibase_MemoryFile, Equibase_MemoryFile, `<,`n`<, All
+;FileAppend, %Equibase_MemoryFile%, % TodaysFile_Equibase
+
+
+
+;;Counts the number of lines to be used in progress bar calculations and compiles all of RacingChannels HTML to a single file
+TB_TXT_Array := StrSplit(Equibase_MemoryFile,"<")
+The_EquibaseTotalTXTLines := TB_TXT_Array.MaxIndex()
+
+RacingChannel_bool := False ;RC shut down, skip RC stuff as best as possible
+If (RacingChannel_bool) {
+		The_RCTotalTXTLines := 0
+		TodaysFile_RC = %A_ScriptDir%\Data\temp\RacingChannelHTML.html
+	Loop, %A_ScriptDir%\Data\temp\RacingChannel\*.*, 0, 1 ;Recurse into all subfolders (TBred and Harness)
+	{
+		FileRead, MemoryFile, %A_LoopFileFullPath%
+		FileAppend, %MemoryFile%, %TodaysFile_RC%
+		Loop, Read, %A_LoopFileFullPath%
+		{
+			The_RCTotalTXTLines += 1
+		}
+	}
+	Fn_CreateArchiveDir(TodaysFile_RC)
+}
+
+
+;Array_Gui(TB_TXT_Array)
+
+;;Read Each line of Converted Equibase XML to an object containing every horse; their program number, scratch status, etc
+Loop, % TB_TXT_Array.MaxIndex() {
+	ReadLine := TB_TXT_Array[A_Index]
+	;Msgbox, % ReadLine
+	/*
+		The_HorseName := Fn_QuickRegEx(ReadLine,"horse_name=\x22(.+)\x22\s")
+		The_TrackName := Fn_QuickRegEx(ReadLine,"track_name=\x22(.*)\x22 id")
+		The_RaceNumber := Fn_QuickRegEx(ReadLine,"race_number=\x22(.*)\x22>")
+		RegexMatch(ReadLine, "\sprogram_number=\x22(.*)\x22>", RE_ProgramNumber)
+	*/
+	
+	RegexMatch(ReadLine, "horse_name=\x22(.+)\x22\s", RE_HorseName)
+	If (RE_HorseName1 != "") {
+		The_HorseName := RE_HorseName1
+	}
+	
+	RegexMatch(ReadLine, "track_name=\x22(.*)\x22 id", RE_TrackName)
+	If (RE_TrackName1 != "") {
+		The_TrackName := RE_TrackName1
+	}
+	
+	RegexMatch(ReadLine, "race_number=\x22(.*)\x22>", RE_RaceNumber)
+	If (RE_RaceNumber1 != "") {
+		The_RaceNumber := RE_RaceNumber1
+	}
+	
+	RegexMatch(ReadLine, "\sprogram_number=\x22(.*)\x22>", RE_ProgramNumber)
+	If (RE_ProgramNumber1 != "") {
+		The_ProgramNumber := RE_ProgramNumber1
+		The_EntryNumber := Fn_ConvertEntryNumber(RE_ProgramNumber1)
+		The_EntryNumber := The_RaceNumber * 1000 + The_EntryNumber
+	}
+	
+	RegexMatch(ReadLine, "change_description>(\w+)", RE_Scratch)
+	If (RE_Scratch1 = "Scratched") {
+		The_ScratchGate := 1
+	}
+	If (RE_Scratch1 = "First") { ;"First Start Since Reported as Gelding" does not allow The_ScratchGate to be entered
+		The_ScratchGate := 0
+	}
+	
+	RegexMatch(ReadLine, "new_value>(Y)", RE_Scratch)
+	If (RE_Scratch1 != "") {
+		If (The_ScratchGate = 1) {
+			The_ScratchStatus := 1
+		}
+	}
+	
+	RegexMatch(ReadLine, "new_value>(N)", RE_Scratch)
+	If (RE_Scratch1 != "") { ;In this case changing to a new_value of 'No' would mean the runner has been livened
+		The_ScratchStatus := 9
+	}
+	
+	RegexMatch(ReadLine, "(\/horse>)", RE_Change)
+	If (RE_Change1 != "") {
+		Fn_InsertHorseData()
+		The_HorseName := ""
+		The_ScratchStatus := 0
+		The_EntryNumber := ""
+		The_ProgramNumber := ""
+		The_ScratchGate := 0
+	}
+	Fn_GUI_UpdateProgress(A_Index,The_EquibaseTotalTXTLines)
+}
+
+
+;Create RC Array and Dirs to read from
+RacingChannel_Array := []
+Dir_TBred = %A_ScriptDir%\Data\temp\RacingChannel\TBred\*.PHP
+Dir_Harness = %A_ScriptDir%\Data\temp\RacingChannel\Harness\*.PHP
+
+;;Parse Racing Channel tracks into their own object; also compares to TB AllHorses_Array trying to find matches
+Fn_ParseRacingChannel(RacingChannel_Array, TodaysFile_RC)
+;Fn_ParseRacingChannel(RacingChannel_Array, Dir_Harness)
+
+
+;UNUSED SORTING
+;Fn_Sort2DArray(AllHorses_Array, "EntryNumber")
+;Fn_Sort2DArray(AllHorses_Array, "ProgramNumber")
+;Fn_Sort2DArray(AllHorses_Array, "RaceNumber")
+;Fn_Sort2DArray(AllHorses_Array, "TrackName")
+
+;For index, obj in AllHorses_Array
+;	list3 .= AllHorses_Array[index].ProgramNumber . "    " . AllHorses_Array[index].HorseName . "`n"	
+;FileAppend, %list3%, %A_ScriptDir%\allllll.txt
+
+
+;;Look through the provided array and send scratched CE entries to GUI Listview for User to see
+if (Settings.General.AllScratches) {
+	Fn_ReadAllScratches(AllHorses_Array)
+} else {
+	Fn_ReadtoListview(AllHorses_Array)
+}
+
+;Add three blank lines between Equibase and Racing Channel Sections 
+LV_AddBlank(3)
+
+;;Now look through the RacingChannel Array for any CE entries that may have been missed. Also handles Harness Scratches
+RC_AreaAdds := 0
+Loop, % RacingChannel_Array.MaxIndex() {
+	
+	;Added Pools
+	if (RacingChannel_Array[A_Index,"AddedWager"] != "") {
+		RC_AreaAdds++
+		if (RC_AreaAdds = 1) {
+			LV_Add("","","","","■  Harness / Racing Channel Only","")
+		}
+		LV_Add("","","","","► " . RacingChannel_Array[A_Index,"AddedWager"] . " added at " RacingChannel_Array[A_Index,"TrackName"],RacingChannel_Array[A_Index,"RaceNumber"])
+	}
+	
+	;Scratches
+	if (RacingChannel_Array[A_Index,"OtherScratch"] = 1) {
+		RC_AreaAdds++
+		if (RC_AreaAdds = 1) {
+			LV_Add("","","","","■ Harness / Racing Channel Only","")
+		}
+		LV_Add("",RacingChannel_Array[A_Index,"ProgramNumber"],"Scratched","",RacingChannel_Array[A_Index,"HorseName"] . " at " RacingChannel_Array[A_Index,"TrackName"],RacingChannel_Array[A_Index,"RaceNumber"])
+	}
+}
+
+;;Show number of effected Races so user knows if there is a new change.
+guicontrol, Text, GUI_EffectedEntries, % The_EffectedEntries
+
+
+;;Read listview and color accordingly. This is a subroutine as I want to be able to do it on demand
+Sb_RecountRecolorListView()
+
+;;Warn User if there are no racingchannel files
+
+If (RacingChannel_bool) {
+	IfNotExist, %A_ScriptDir%\Data\temp\RacingChannel\TBred\*.PHP
+	{
+		Fn_MouseToolTip("No RacingChannel Data Downloaded. Login and Retry", 10)
+	}
+	IfNotExist, %A_ScriptDir%\Data\temp\RacingChannel\Harness\*.PHP
+	{
+		Fn_MouseToolTip("No RacingChannel Data Downloaded. Login and Retry", 10)
+	}
+}
+if (TB_TXT_Array.MaxIndex() < 40) {
+	Fn_MouseToolTip("EQUIBASE Data is very small. Check that site is accessible", 10)
+}
+
+
+;;END, Re-enable all GUI buttons
+Fn_GUI_UpdateProgress(100)
+EnableAllButtons()
+BusyVar = 0
+Return
+
+;~~~~~~~~~~~~~~~~~~~~~
+;Check Results
+;~~~~~~~~~~~~~~~~~~~~~
+; See class_RaceResults
+CheckResults:
+Msgbox, This does not work now that Racing Channel shut down
+Return
+
+DiableAllButtons()
+Fn_GUI_UpdateProgress(1,100)
+RaceResultsObj := New RaceResults
+RaceResultsObj.ClearTemp()
+RaceResultsObj.Download_Tracks()
+Fn_GUI_UpdateProgress(25,100)
+RaceResultsObj.GetHorseNamesFromPDF()
+Fn_GUI_UpdateProgress(50,100)
+RaceResultsObj.ParseResults()
+RaceResultsObj.CompareResults()
+
+LVA_EraseAllCells("GUI_Listview")
+LV_Delete()
+RaceResultsObj.Export_into_ListView()
+EnableAllButtons()
 LV_ModifyCol()
+LV_ModifyCol(5, 40)
+Fn_GUI_UpdateProgress(100,100)
+Return
 
 
-;/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\
-; JSON Generation
-;\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/
-FormatTime, Today, , yyyyMMdd
-FileDelete, %A_ScriptDir%\%Options_AdminConsoleFileName%
-Data_json := []
-loop, % AllTracks_Array.MaxIndex() {
-	;msgbox, % AllTracks_Array[A_Index,"Date"] " vs " Today
-	If (AllTracks_Array[A_Index,"Date"] >= Today && !InStr(AllTracks_Array[A_Index,"DateTrack"],"null")) {
-		thistrack := {}
-		thistrack.name := AllTracks_Array[A_Index,"TrackName"]
-		thistrack.filename := AllTracks_Array[A_Index,"FinalFilename"]
-		thistrack.date := AllTracks_Array[A_Index,"Date"]
-		thistrack.group := AllTracks_Array[A_Index,"Key"]
-		If (AllTracks_Array[A_Index,"International"] = true) {
-			thistrack.international := true
-		} else {
-			thistrack.international := false
-		}
-		
-		;replace some yesteryear placeholder characters
-		thistrack.group := StrReplace(thistrack.group, "#" , "/")
-		thistrack.group := StrReplace(thistrack.group, "_" , " ")
-		;AllTracks_Array[AllTracks_ArraX,"Key"]
-		Data_json.push(thistrack)
-	}
-}
-
-If (Options_ExportAdminConsole = 1) {
-	FileAppend, % JSON.stringify(Data_json), %A_ScriptDir%\%Options_AdminConsoleFileName%
-}
-
-
-
+$F1::
+WinActivate, %The_ProjectName%
+Goto UpdateButton
+Return
 
 ;/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\
-; HTML Generation
+; FUNCTIONS
 ;\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/
-If (Options_ExportDrupalHTML = 1) {
-	LineText := "<!--=TVG Drupal=---------------------------------------->"
-	Fn_InsertText(LineText)
-	
-	
-	Keys := []
-	Loop, % AllTracks_Array.MaxIndex() {
-		x := AllTracks_Array[A_Index,"Key"]
-		if (Fn_HasVal(Keys,x) = -1) {
-			; msgbox, % "pushing " . x
-			Keys.push(x)
-		}
-	}
-	Fn_SortArray(Keys)
-	;;Export Each Track type to HTML
-	Loop, % Keys.MaxIndex() {
-		Fn_Export(Keys[A_Index], Options_TVG3PrefixURL)
-	}
+#Include LVA.ahk
 
-
-	;;Aus, NZ, and Japan must be handled explicitly because they don't follow SimoCentral rules
-	; Fn_Export("Australia", Options_TVG3PrefixURL)
-	; Fn_Export("New_Zealand", Options_TVG3PrefixURL)
-	; Fn_Export("South Korea", Options_TVG3PrefixURL)
-	; Fn_Export("Japan", Options_TVG3PrefixURL)
-	; ;Loop all others
-	; Loop, %inisections%
-	; {
-	; 	Fn_Export(section%A_Index%, Options_TVG3PrefixURL)
-	; }
-	; Fn_Export("Other", Options_TVG3PrefixURL)
+Sb_GlobalNameSpace()
+{
+	global
+	
+	CE_Arr := [[x],[y]]
+	ArrX = 0
+	
+	AllHorses_Array := []
+	Ignored_CE = 4
+	
+	ScratchCounter := 0
+	The_EffectedEntries := 0
+	
+	FileCreateDir, % Settings.General.SharedLocation . "\Data\archive\DBs"
+	A_LF := "`n"
+	Return
 }
-	
-
-;Kick Array items over 30 days old out
-Fn_RemoveDatedKeysInArray("DateTrack", AllTracks_Array)
 
 
-;For Debugging. Show contents of the Array 
-;Array_Gui(AllTracks_Array)
+Fn_DownloadtoFile(para_URL)
+{
+	;Download Page directly to memory
+	httpObject:=ComObjCreate("WinHttp.WinHttpRequest.5.1") ;Create the Object
+	httpObject.Open("GET",para_URL) ;Open communication
+	httpObject.Send() ;Send the "get" request
+	Response := httpObject.ResponseText ;Set the "text" variable to the response
+	If (Response != "") {
+		Return % Response
+	} Else {
+		Return "null"
+	}
+}
+
+;Imports Existing Seen Horses DB File
+Fn_ImportDBData()
+{
+	global
+
+	FormatTime, A_Today, , yyyyMMdd
+	FileRead, MemoryFile, % Settings.General.SharedLocation . "\Data\archive\DBs\" . A_Today . "_" . The_VersionName . "DB.json"
+	SeenHorses_Array := Fn_JSONtooOBJ(MemoryFile)
+	MemoryFile := ;Blank
+}
 
 ;Export Array as a JSON file
-The_MemoryFile := JSON.stringify(AllTracks_Array)
-FileDelete, %Options_DBLocation%\DB.json
-FileAppend, %The_MemoryFile%, %Options_DBLocation%\DB.json
-
-;;ALL DONE
-Return
-
-
-;/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\
-; Buttons
-;\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/
-EditDate:
-selected := LV_GetNext(1, Focused)
-if (selected > 0) { ;If a number
-	LV_GetText(INDEX, selected, 1) ;INDEX
-	LV_GetText(RowText, selected, 4) ;date
-	msgtext := "Please enter a new date in YYYYMMDD format"
-	InputBox, UserInput, %msgtext%, %msgtext%, , , , , , , ,%RowText%
-	AllTracks_Array[INDEX,"Date"] := UserInput
-	Goto, Parse
-}
-Return
-
-EditAssoc:
-selected := LV_GetNext(1, Focused)
-if (selected > 0) {
-	LV_GetText(INDEX, selected, 1) ;INDEX
-	LV_GetText(RowText, selected, 3) ;assoc
-	msgtext := "Please enter a new Association (Australia, UK#IRE, etc)"
-	InputBox, UserInput, %msgtext%, %msgtext%, , , , , , , ,%RowText%
-	AllTracks_Array[INDEX,"Key"] := UserInput
-	Goto, Parse
-}
-Return
-
-EditName:
-selected := LV_GetNext(1, Focused)
-if (selected > 0) {
-	LV_GetText(INDEX, selected, 1) ;INDEX
-	LV_GetText(RowText, selected, 2) ;TrackName
-	msgtext := "Please enter a new Trackname"
-	InputBox, UserInput, %msgtext%, %msgtext%, , , , , , , ,%RowText%
-	AllTracks_Array[INDEX,"TrackName"] := UserInput
-	Goto, Parse
-}
-Return
-
-
-Delete:
-selected := LV_GetNext(1, Focused)
-if (selected > 0) {
-	LV_GetText(INDEX, selected, 1) ;INDEX
-	msgbox, % AllTracks_Array[INDEX,"DateTrack"]
-	AllTracks_Array[INDEX,"Date"] := 20100101 ;Will be automatically purged because of old date
-	AllTracks_Array.Remove(INDEX)
-	Goto, Parse
-}
-Return
-
-;;Actually move and rename files now
-Rename:
-Sb_RenameFiles()
-Return
-
-;/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\
-; Subroutines
-;\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/
-
-Sb_RenameFiles()
+Fn_ExportArray()
 {
-Global
-
-	;Read each track in the array and write to HTML if it matches the current key (GB/IR, Australia, etc)
-	Loop % AllTracks_Array.MaxIndex()
-	{
-		l_OldFileName := AllTracks_Array[A_Index,"FileName"]
-		l_NewFileName := AllTracks_Array[A_Index,"FinalFilename"]
-
-		IfNotExist, %A_ScriptDir%\%l_OldFileName%
-		{
-			Continue
-		}
-		If (!InStr(l_OldFileName,".pdf")) {
-			Continue
-		}
-		;Msgbox, moving %l_OldFileName% to %l_NewFileName%
-		FileMove, %A_ScriptDir%\%l_OldFileName%, %A_ScriptDir%\%l_NewFileName%, 1
-		;If the filemove was unsuccessful for any reason, tell user
-		If (Errorlevel) {
-			Msgbox, There was a problem renaming the %l_OldFileName% file. Permissions\FileInUse
-		}
-	}
+	global
+	MemoryFile := Fn_JSONfromOBJ(SeenHorses_Array)
+	FileDelete, % Settings.General.SharedLocation . "\Data\archive\DBs\" . A_Today . "_" . The_VersionName . "DB.json"
+	FileAppend, %MemoryFile%, % Settings.General.SharedLocation . "\Data\archive\DBs\" . A_Today . "_" . The_VersionName . "DB.json"
+	MemoryFile := ;Blank
 }
 
 
 
-;/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\
-; Functions
-;\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/--\--/
-
-;Gets the timestamp out of a filename and converts it into a full day of the week name
-Fn_GetWeekName(para_String) ;Example Input: "20140730Scottsville"
+Fn_SeenBeforeChecker(para_Obj)
 {
-RegExMatch(para_String, "(\d{4})(\d{2})(\d{2})", RE_TimeStamp)
-	If (RE_TimeStamp1 != "") {
-		;dddd corresponds to Monday for example
-		FormatTime, l_WeekdayName , %RE_TimeStamp1%%RE_TimeStamp2%%RE_TimeStamp3%, dddd
+	FormatTime, A_Today, , yyyyMMdd
+	FileRead, MemoryFile, % Settings.General.SharedLocation . "\Data\archive\DBs\" . A_Today . "_" . The_VersionName . "DB.json"
+	SeenHorses_Array := Fn_JSONtooOBJ(MemoryFile)
+	MemoryFile := ;Blank
+}
+
+Fn_InsertHorseData()
+{
+	global
+	
+	;The_HorseNameLength := StrLen(The_HorseName)
+	
+	X := AllHorses_Array.MaxIndex() 
+	
+	If (The_HorseName != "") {
+		X += 1
+		AllHorses_Array[X,"EntryNumber"] := The_EntryNumber ;Index
+		AllHorses_Array[X,"TrackName"] := The_TrackName
+		AllHorses_Array[X,"HorseName"] := The_HorseName
+		AllHorses_Array[X,"ProgramNumber"] := The_ProgramNumber
+		AllHorses_Array[X,"RaceNumber"] := The_RaceNumber
+		AllHorses_Array[X,"Scratched"] := The_ScratchStatus
 	}
-	If (l_WeekdayName != "") {
-		Return l_WeekdayName
+	The_ScratchStatus := 0
+}
+
+Fn_StripleadingZero(para_input)
+{
+	OutputVar := Fn_QuickRegEx(para_input,"0(\d+)")
+	If (OutputVar = "null") {
+		return % para_input
 	} else {
-		;Return a fat error is nothing is found
-		;Msgbox, ERROR - %RE_TimeStamp1%%RE_TimeStamp2%%RE_TimeStamp3% - %para_String%
-		Return "ERROR"
+		return % OutputVar
 	}
 }
 
-Fn_RemoveDatedKeysInArray(para_Key,para_Array)
+Fn_TitleCase(para_String)
 {
-	LastMonth :=
-	LastMonth += -4, d
-	StringTrimRight, LastMonth, LastMonth, 6
-	Loop, 33
+	StringUpper, l_ReturnValue, para_String, T
+	return %l_ReturnValue%
+}
+
+
+Fn_TrackTitle(para_String)
+{
+	StringUpper, l_ReturnValue, para_String, T
+	Return % "■ " . l_ReturnValue
+}
+
+Fn_ParseRacingChannel(para_Array, para_File)
+{
+	Global AllHorses_Array
+	Global The_RCTotalTXTLines
+	X := 0
+	
+	;Read eachline RacingChannel file
+	Loop, Read, %para_File%
 	{
-		Loop % para_Array.MaxIndex() {
-		l_DateTrack := para_Array[A_Index,para_Key]
-		If (!Fn_IsValidDate(para_Array[A_Index,"Date"])) {
-			Msgbox, % "Really kick out " . para_Array[A_Index,"FinalFilename"] . "? The date ( " . para_Array[A_Index,"Date"] . ") is invalid. Format is ALWAYS YYYYMMDD"
-			para_Array.Remove(A_Index)
-			Break
-		}
-		;Convert data out of l_DateTrack to get the weekdayname and new format of timestamp
-		l_WeekdayName := Fn_GetWeekName(l_DateTrack)
-		
-		;See if item is new enough to stay in the array
-		FileDate := Fn_JustGetDate(l_DateTrack)
-			If (FileDate < LastMonth) {
-				para_Array.Remove(A_Index)
-				Break
-				;Must break out because A_Index will no longer corrilate to correct array index
-			}
-		}
-	}
-}
-
-Fn_JustGetDate(para_String)
-{
-;local
-	RegExMatch(para_String, "(\d{4})(\d{2})(\d{2})", RE_TimeStamp)
-	If (RE_TimeStamp1 != "") {
-		l_TimeStamp = %RE_TimeStamp1%%RE_TimeStamp2%%RE_TimeStamp3%
-		Return %l_TimeStamp%
-	}
-;Else
-Return ERROR
-}
-
-Fn_GetWeekNameOLD(para_String) ;Example Input: "073014Scottsville"
-{
-	RegExMatch(para_String, "\d{2}(\d{2})(\d{2})(\d{2})", RE_TimeStamp)
-	If (RE_TimeStamp1 != "") {
-		;dddd corresponds to Monday for example
-		FormatTime, l_WeekdayName , 20%RE_TimeStamp3%%RE_TimeStamp1%%RE_TimeStamp2%, dddd
-	}
-	If (l_WeekdayName != "") {
-		Return l_WeekdayName
-	}
-	;Return a fat error if nothing is found
-	Msgbox, Couldn't understand the date format in %para_String%
-	Return "ERROR"
-}
-
-
-;Changes a correct Timestamp 20140730 to a bad one! 071314
-Fn_GetModifiedDate(para_String) ;Example Input: "20140730Scottsville"
-{
-RegExMatch(para_String, "(\d{4})(\d{2})(\d{2})", RE_TimeStamp)
-	If (RE_TimeStamp1 != "") {
-		l_NewDateFormat = %RE_TimeStamp2%%RE_TimeStamp3%%RE_TimeStamp1%
-		Return l_NewDateFormat
-	} Else {
-		Msgbox, Couldn't understand the date format of %para_String%. Check for Errors.
-	}
-}
-
-
-Fn_FindTrackIniKey(para_TrackCode)
-{
-Global settings
-
-	Loop, Read, %settings%
-	{
-		;Remember the INI key value for each section until a match has been found
-		IfInString, A_LoopReadLine, ]
+		Fn_GUI_UpdateProgress(A_Index,The_RCTotalTXTLines)
+		;TrackName
+		RegExFound := Fn_QuickRegEx(A_LoopReadLine,"<TITLE>(\D+) Changes<\/TITLE>")
+		If (RegExFound != "null")
 		{
-		l_CurrentIniKey = %A_LoopReadLine%
+			TrackName := RegExFound
+		}
+		;RaceNumber    ;<A name=race(\d+) also works
+		RegExFound := Fn_QuickRegEx(A_LoopReadLine,"<B><U>(\d+)")
+		If (RegExFound != "null")
+		{
+			RaceNumber := RegExFound
+		}
+		;ProgramNumber
+		REG = <TD WIDTH="20"><B>(\w+)<
+		RegExFound := Fn_QuickRegEx(A_LoopReadLine,REG)
+		If (RegExFound != "null")
+		{
+			ProgramNumber := RegExFound
+		}
+		;HorseName
+		REG = WIDTH="150"><B>(\D+)<\/B>
+		RegExFound := Fn_QuickRegEx(A_LoopReadLine,REG)
+		If (RegExFound != "null")
+		{
+			HorseName := RegExFound
 		}
 		
-		;Cut each track line into a psudo array and see if it matches the parameter track code
-		StringSplit, ConfigArray, A_LoopReadLine, =,
-		If (ConfigArray1 = para_TrackCode) {
-		;Match found, remove brackets from current ini key and send back out of function
-		StringReplace, l_CurrentIniKey, l_CurrentIniKey, [,,
-		StringReplace, l_CurrentIniKey, l_CurrentIniKey, ],,
-		Return %l_CurrentIniKey%
+		;Wagering Added		
+		Options_ShowAddedWagers = 1
+		If (Options_ShowAddedWagers = 1)
+		{
+			;Superfecta
+			If (InStr(A_LoopReadLine,"superfecta") && InStr(A_LoopReadLine,"add"))
+			{
+				X++
+				para_Array[X,"TrackName"] := TrackName
+				para_Array[X,"RaceNumber"] := RaceNumber
+				para_Array[X,"AddedWager"] := "Superfecta"
+			}
+			
+			;Trifecta
+			If (InStr(A_LoopReadLine,"trifecta") && InStr(A_LoopReadLine,"add"))
+			{
+				X++
+				para_Array[X,"TrackName"] := TrackName
+				para_Array[X,"RaceNumber"] := RaceNumber
+				para_Array[X,"AddedWager"] := "Trifecta"
+			}
+			
+			;Daily Double
+			If (InStr(A_LoopReadLine,"daily double") && InStr(A_LoopReadLine,"add"))
+			{
+				X++
+				para_Array[X,"TrackName"] := TrackName
+				para_Array[X,"RaceNumber"] := RaceNumber
+				para_Array[X,"AddedWager"] := "Daily Double"
+			}
+		}
+		
+		;Status
+		REG = scratched (\(part of entry\))
+		RegExFound := Fn_QuickRegEx(A_LoopReadLine,REG)
+		If (RegExFound != "null" && HorseName != "")
+		{
+			HorseStatus := 1
+			
+			X++
+			para_Array[X,"TrackName"] := TrackName
+			para_Array[X,"RaceNumber"] := RaceNumber
+			para_Array[X,"ProgramNumber"] := ProgramNumber
+			para_Array[X,"HorseName"] := HorseName
+			para_Array[X,"Status"] := HorseStatus
+			
+			ProgramNumber := "", HorseName := "" , HorseStatus := "" ;Clear all vars
+			
+			MatchFound := 0
+			Loop, % AllHorses_Array.MaxIndex()
+			{
+				If (AllHorses_Array[A_Index,"HorseName"] = para_Array[X,"HorseName"])
+				{
+					AllHorses_Array[A_Index,"RCConfirm"] := "/"
+					MatchFound := 1
+				}
+				;Else ;switch back to this if a binary system is needed
+				;{
+				;AllHorses_Array[A_Index,"RCConfirm"] := 0
+				;}
+			}
+			If (MatchFound != 1)
+			{
+				para_Array[X,"OtherScratch"] := 1
+			}
+			HorseStatus := 0
 		}
 	}
-	Return "null"
 }
 
 
-;This function inserts each track to an array that later gets sorted and exported to HTML
-Fn_InsertData(para_Key, para_TrackName, para_Date, para_OldFileName, para_International := 1) 
+Fn_WriteOutCE(Obj)
 {
-Global
-
-	;Find out how big the array is currently
-	AllTracks_ArraX := AllTracks_Array.MaxIndex()
-	If (AllTracks_ArraX = "") {
-		;Array is blank, start at 0
-		AllTracks_ArraX = 0
-	}
-
-	;See if the Track/Date is already present in the array. If yes, do not insert again
-	Loop, % AllTracks_Array.MaxIndex()
+	Global SeenHorses_Array
+	Global Current_Track
+	Global Current_Race
+	Global The_EffectedEntries
+	
+	ScratchCheck := 0
+	;Entire Entry checking
+	Loop, % Obj.MaxIndex()
 	{
-		If (para_Date . para_TrackName = AllTracks_Array[A_Index,"Date"] . AllTracks_Array[A_Index,"TrackName"]) {
-			;Msgbox, %para_TrackName% for %para_Date% already exists in this array
-			return
+		If (Obj[A_Index,"Scratched"] = 1) {
+			ScratchCheck += 1
 		}
-	}
-
-	;;International Track declaration
-	;Just trusts para_International to be accurate
-
-	AllTracks_ArraX += 1
-	If (!para_Date || !para_TrackName) {
-		return
-	}
-
-	AllTracks_Array[AllTracks_ArraX,"Key"] := para_Key
-	AllTracks_Array[AllTracks_ArraX,"TrackName"] := para_TrackName
-	AllTracks_Array[AllTracks_ArraX,"Date"] := para_Date
-	AllTracks_Array[AllTracks_ArraX,"DateTrack"] := para_Date . para_TrackName
-	AllTracks_Array[AllTracks_ArraX,"FileName"] := para_OldFileName
-	AllTracks_Array[AllTracks_ArraX,"FinalFilename"] := Fn_Filename(para_TrackName, para_Date)
-	AllTracks_Array[AllTracks_ArraX,"International"] := para_International
-	if (AllTracks_Array[AllTracks_ArraX,"Date"] = "null") {
-		Msgbox, % "FATAL ERROR WITH " AllTracks_Array[AllTracks_ArraX,"FinalFilename"] " - " para_DateTrack 
-		ExitApp
-	}
-}
-
-
-
-Fn_Export(para_Key, para_URLLead)
-{
-Global
-
-	l_Today = %A_YYYY%%A_MM%%A_DD%
-	;Create HTML Title if any of that kind of track exist
-	AllTracks_ArraX = 0
-	Loop % AllTracks_Array.MaxIndex()
-	{
-		l_FileTimeStamp := AllTracks_Array[A_Index,"Date"]
-		;Only add HTML title if [Key] Tracks are in the array AND are scheduled today or greater
-		If (para_key = AllTracks_Array[A_Index,"Key"] && l_FileTimeStamp >= l_Today) {
-			AllTracks_ArraX += 1
-		}
-	}
-	If ( AllTracks_ArraX >= 1) {
-		Fn_InsertBlank(void)
-		Fn_InsertBlank(void)
-		Fn_InsertBlank(void)
-		Fn_HTMLTitle(para_Key)
-	}
-
-
-	;Read each track in the array and write to HTML if it matches the current key (GB/IR, Australia, etc)
-	Loop % AllTracks_Array.MaxIndex()
-	{
-		If (para_key = AllTracks_Array[A_Index,"Key"])	{
-			l_Key := AllTracks_Array[A_Index,"Key"]
-			l_TrackName := AllTracks_Array[A_Index,"TrackName"]
-			l_DateTrack := AllTracks_Array[A_Index,"DateTrack"]
-			l_OldFileName := AllTracks_Array[A_Index,"FileName"]
-			
-			;Convert data out of l_DateTrack to get the weekdayname and new format of timestamp
-			l_WeekdayName := Fn_GetWeekName(l_DateTrack)
-			;Move file with new name; overwriting if necessary
-			l_NewFileName := AllTracks_Array[A_Index,"FinalFilename"]
-			
-			;See if array item is new enough to be used in HTML
-			If (AllTracks_Array[A_Index,"Date"] < l_Today) {
-				;Skip to next item because this is older than today
-				Continue
-			}
-				
-			l_TrackName := Fn_ReplaceString("_", " ", l_TrackName)
-			l_Key := Fn_ReplaceString("_", " ", l_Key)
-			;If the TrackName matches the Key, only output day in the HTML Name (This is for Australia/New Zealand/Japan)
-			If (l_TrackName = l_Key) {
-				l_CurrentLine = <a href="%para_URLLead%%l_NewFileName%" target="_blank">%l_WeekdayName% PPs</a><br />
-			} Else {
-				l_CurrentLine = <a href="%para_URLLead%%l_NewFileName%" target="_blank">%l_TrackName%, %l_WeekdayName% PPs</a><br />
-			}
-			
-			;Check for UK/IRE and insert a </ br> if new weekday is detected
-			If (InStr(AllTracks_Array[A_Index,"Key"],"UK")) {
-				If (FirstGBLoop = 1 && AllTracks_Array[A_Index,"Key"] = "UK#IRE") {
-					LastDate := l_WeekdayName
-					FirstGBLoop := 0
-				}
-				If (LastDate != l_WeekdayName && AllTracks_Array[A_Index,"Key"] = "UK#IRE") {
-					Fn_InsertText("<br />")
-					LastDate := l_WeekdayName
-				}
-			}
-			Fn_InsertText(l_CurrentLine)
+		If (Obj[A_Index,"Scratched"] = 9) {
+			ReLivened := 1
+		} else {
+			ReLivened := 0
 		}
 	}
 	
-	If ( AllTracks_ArraX >= 1) {
-		Fn_InsertText("<br />")
+	
+	;Only allow scratched or re-lieved entries
+	If (ScratchCheck != 0) {
+		The_EffectedEntries += 1
+		Loop, % Obj.MaxIndex() {
+			CurrentHorse := Obj[A_Index,"HorseName"]
+			If (Obj[A_Index,"Scratched"] = 0) {
+				Status := ""
+			}
+			If (Obj[A_Index,"Scratched"] = 1) {
+				Status := "Scratched"
+			}
+			If (Obj[A_Index,"Scratched"] = 9) {
+				Status := "RE-LIVENED"
+			}
+
+			
+			;Msgbox, % Obj[A_Index,"ConfirmScratch"] ;Uncomment to see what RacingChannel says for each entry.
+			If (Current_Track != Obj[1,"TrackName"]) {
+				If (The_EffectedEntries != 1) {
+					LV_AddBlank(3)
+				}
+				LV_Add("","","","",Fn_TrackTitle(Obj[1,"TrackName"]),"")
+				Current_Track := Obj[1,"TrackName"]
+				Current_Race := ""
+			}
+			If (Current_Race != Obj[1,"RaceNumber"]) {
+				LV_Add("","","","","Race" . Obj[1,"RaceNumber"],"")
+				Current_Race := Obj[1,"RaceNumber"]
+			}
+			LV_Add("",Obj[A_Index,"ProgramNumber"],Status,"",Obj[A_Index,"HorseName"],Obj[A_Index,"RaceNumber"])
+		}
+	}
+	Return %ScratchCheck%
+}
+
+
+Fn_ReadtoListview(Obj)
+{
+	Scratch_Counter := 0
+	CE_FirstFound = 0
+	ReRead = 0
+	FirstHorse_Toggle := 1
+	
+	;Loop a total time of all horses
+	Loop, % Obj.MaxIndex() + 1 ;Plus one required if there is a coupled entry at the very end of the array
+	{
+		;ReRead is needed to review each new horse as the possible 1st entry. that is; each 
+		ReRead:
+
+		;If this is the first horse of an entry and the horsename is not blank; put it into the CE_Array0 so that it is remembered
+		If (FirstHorse_Toggle = 1 && Obj[A_Index,"HorseName"] != "")
+		{ ;First Horse going into ARRAY~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+			CE_Array := []
+			ArrX := 1
+			CE_Array[ArrX,"HorseName"] := Obj[A_Index,"HorseName"]
+			CE_Array[ArrX,"Scratched"] := Obj[A_Index,"Scratched"]
+			CE_Array[ArrX,"ProgramNumber"] := Obj[A_Index,"ProgramNumber"]
+			CE_Array[ArrX,"TrackName"] := Obj[A_Index,"TrackName"]
+			CE_Array[ArrX,"RaceNumber"] := Obj[A_Index,"RaceNumber"]
+			CE_Array[ArrX,"ConfirmScratch"] := Obj[A_Index,"RCConfirm"]
+			FirstHorse_Toggle := 0
+			Continue
+		}
+		
+		;If the two runners numbers match; AND the race number is the same; AND tracknames match
+		If (Fn_ComparetwoRunners(Obj[A_Index,"ProgramNumber"],CE_Array[1,"ProgramNumber"]) && Obj[A_Index,"RaceNumber"] = CE_Array[1,"RaceNumber"] && Obj[A_Index,"TrackName"] = CE_Array[1,"TrackName"])
+		{ ;2nd HORSE FOUND!~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+			ArrX += 1
+			CE_Array[ArrX,"HorseName"] := Obj[A_Index,"HorseName"]
+			CE_Array[ArrX,"Scratched"] := Obj[A_Index,"Scratched"]
+			CE_Array[ArrX,"ProgramNumber"] := Obj[A_Index,"ProgramNumber"]
+			CE_Array[ArrX,"TrackName"] := Obj[A_Index,"TrackName"]
+			CE_Array[ArrX,"RaceNumber"] := Obj[A_Index,"RaceNumber"]
+			CE_Array[ArrX,"ConfirmScratch"] := Obj[A_Index,"RCConfirm"]
+			Continue
+		}
+		
+		;Catchall for any other instances; Runners not a part of an entry will end up here; triggering the next Program Number to be checked.
+		If (CE_Array.MaxIndex() >= 2) ;If 2 or more runners in the entry
+		{
+			Fn_WriteOutCE(CE_Array)
+			CE_Array := []
+		}
+		FirstHorse_Toggle = 1
+		CE_Array := []
+		ArrX := 0
+		ReRead = 1
+		;This Goto can be replaced if a second ArrX variable is used instead of A_Index. Later perhaps.
+		Goto ReRead
 	}
 }
 
 
-Fn_HTMLTitle(para_Text)
-{
-para_Text := Fn_ReplaceString("#", "/", para_Text)
-para_Text := Fn_ReplaceString("_", " ", para_Text)
-l_CurrentLine = <span style="color: #0c9256;"><strong>%para_Text%</strong></span><br />
-Fn_InsertText(l_CurrentLine)
-	If (InStr(para_Text, "GB"))	{
-		l_CurrentLine = <a href="http://www.timeform.com/free/" target="_blank">TIMEFORM</a><br />
-		Fn_InsertText(l_CurrentLine)
+Fn_ComparetwoRunners(para_one,para_two)
+{ ;this just simplifies comparison of coupled entries as there are some unique weaknesses in comparing InStr(runner2,runner1)
+	runnernumber1 := Fn_QuickRegEx(para_one,"(\d+)")
+	runnernumber2 := Fn_QuickRegEx(para_two,"(\d+)")
+
+	if (runnernumber1 = runnernumber2) {
+		return true
+	} else {
+		return false
 	}
 }
 
 
-;This function just inserts a line of text
-Fn_InsertText(para_Text) 
+Fn_ReadAllScratches(Obj)
 {
-Global
-
-	FileAppend, %para_Text%`n, % The_HMTLFile
+	Scratch_Counter := 0
+	CE_FirstFound = 0
+	ReRead = 0
+	FirstHorse_Toggle := 1
+	
+	;Loop a total time of all horses
+	Loop, % Obj.MaxIndex() + 1 ;Plus one required if there is a coupled entry at the very end of the array
+	{
+		ReRead2:
+		;If this is the first horse of an entry and the horsename is not blank; put it into the CE_Array0 so that it is remembered
+		;Obj[A_Index,"Scratched"] contains 1 or 0
+		If (Obj[A_Index,"Scratched"] = 1 && Obj[A_Index,"HorseName"] != "")
+		{ ;Horse going into Scratched Array because it is scratched
+			Scratch_Array := []
+			ArrX := 1
+			Scratch_Array[ArrX,"HorseName"] := Obj[A_Index,"HorseName"]
+			Scratch_Array[ArrX,"Scratched"] := Obj[A_Index,"Scratched"]
+			Scratch_Array[ArrX,"ProgramNumber"] := Obj[A_Index,"ProgramNumber"]
+			Scratch_Array[ArrX,"TrackName"] := Obj[A_Index,"TrackName"]
+			Scratch_Array[ArrX,"RaceNumber"] := Obj[A_Index,"RaceNumber"]
+			Scratch_Array[ArrX,"ConfirmScratch"] := Obj[A_Index,"RCConfirm"]
+			FirstHorse_Toggle := 0
+			Continue
+		}
+		
+		;Catchall for any other instances; Runners not a part of an entry will end up here; triggering the next Program Number to be checked.
+		If (Scratch_Array.MaxIndex() >= 1) ;If 2 or more runners in the entry
+		{
+			Fn_WriteOutCE(Scratch_Array)
+			Scratch_Array := []
+		}
+		FirstHorse_Toggle = 1
+		Scratch_Array := []
+		ArrX := 0
+		ReRead = 1
+		;This Goto can be replaced if a second ArrX variable is used instead of A_Index. Later perhaps.
+		;Goto ReRead2
+	}
 }
 
 
-;This function inserts a blank line. How worthless 
-Fn_InsertBlank(void)
+LV_AddBlank(para_number)
 {
-Global
-
-	FileAppend, `n, % The_HMTLFile
+	Loop, %para_number% {
+		LV_Add("", "", "", "", "")
+	}
 }
 
 
-;/--\--/--\--/--\--/--\--/--\
-; GUI
-;\--/--\--/--\--/--\--/--\--/
-GUI()
+;Legacy, Not used
+ReturnReplace(Word)
 {
-global
-;Title
-Gui, Font, s14 w70, Arial
-Gui, Add, Text, x2 y4 w220 +Center, %The_ProjectName%
-Gui, Font, s10 w70, Arial
-Gui, Add, Text, x168 y0 w50 +Right, v%The_VersionName%
-
-Gui, Font
+	global
+	
+	; Replace all spaces with pluses:
+	StringReplace, FileContents, FileContents, %Word%,`n%Word%, All
+}
 
 
-Gui,Add,Button,x0 y60 w43 h30 gParse,PARSE ;gMySubroutine
-Gui,Add,Button,x50 y60 w120 h30 gRename,RENAME FILES ;gMySubroutine
-
-Gui,Add,Button,x200 y60 w143 h30 gEditAssoc,EDIT ASSOC
-Gui,Add,Button,x350 y60 w143 h30 gEditName,EDIT TRACK NAME
-Gui,Add,Button,x500 y60 w143 h30 gEditDate,EDIT DATE
-
-Gui,Add,Button,x650 y60 w143 h30 gDelete,DELETE RECORD
-Gui,Add,ListView,x0 y100 w800 h450 Grid vGUI_Listview, Index|Track|Assoc|Date
-	; Gui, Add, ListView, x2 y70 w490 h536 Grid NoSort +ReDraw gDoubleClick vGUI_Listview, #|Status|RC|Name|Race|
-
-Gui,Show,h600 w800, %The_ProjectName%
 
 
-;Menu
-Menu, FileMenu, Add, E&xit`tCtrl+Q, Menu_File-Quit
-Menu, MenuBar, Add, &File, :FileMenu  ; Attach the sub-menu that was created above
+GetNewXML(para_FileName)
+{
+	global
+	
+	FileRemoveDir, %A_ScriptDir%\Data\temp, 1
+	FileCreateDir, %A_ScriptDir%\Data\temp
+	FileDelete, %A_ScriptDir%\Data\temp\ConvertedXML.txt
+	UrlDownloadToFile, http://www.equibase.com/premium/eqbLateChangeXMLDownload.cfm, %A_ScriptDir%\Data\temp\%para_FileName%
+	;Copy to Archive
+	FileCopy %A_ScriptDir%\Data\temp\%para_FileName%, %A_ScriptDir%\Data\archive\%CurrentYear%\%CurrentMonth%\%CurrentDay%\EquibaseXML_%CurrentDate%.xml, 1
+}
 
-Menu, HelpMenu, Add, &About, Menu_About
-Menu, HelpMenu, Add, &Confluence`tCtrl+H, Menu_Confluence
-Menu, MenuBar, Add, &Help, :HelpMenu
+UseExistingXML(para_file = "none")
+{
+	global
+	FileRemoveDir, %A_ScriptDir%\Data\temp, 1
+	FileCreateDir, %A_ScriptDir%\Data\temp
+	FileDelete, %A_ScriptDir%\Data\temp\ConvertedXML.txt
+	If (para_file = "none") {
+		FileSelectFile, XMLPath,,, Please select an Equibase XML file
+		para_file := XMLPath
+	}
+	FileCopy, %para_file%, %A_ScriptDir%\Data\temp\Today_XML.xml, 1
+}
 
-Gui, Menu, MenuBar
+
+Fn_CreateArchiveDir(para_FileToArchive)
+{
+	global
+	
+	;CurrentDate = %A_Now%
+	FormatTime, CurrentDate,, MMddyy
+	FormatTime, CurrentYear,, yyyy
+	FormatTime, CurrentMonth,, MMMM
+	FormatTime, CurrentMonthNumber,, MM
+	FormatTime, CurrentDay,, dd
+	
+	savetime := Settings.General.SharedLocation
+	l_ArchivePath = %savetime%\Data\archive\%CurrentYear%\%CurrentMonthNumber%-%CurrentMonth%\%CurrentDay%\
+	FileCreateDir, %l_ArchivePath%
+	FileCopy, %para_FileToArchive%, %l_ArchivePath%, 1
+	Return %l_ArchivePath%
+}
+
+
+Fn_ArchiveMemory(para_VarToArchive,para_Label)
+{
+	global
+	savetime := Settings.General.SharedLocation
+
+	FormatTime, CurrentDate,, MMddyy
+	FormatTime, CurrentYear,, yyyy
+	FormatTime, CurrentMonth,, MMMM
+	FormatTime, CurrentMonthNumber,, MM
+	FormatTime, CurrentDay,, dd
+	
+	l_ArchivePath = %savetime%\Data\archive\%CurrentYear%\%CurrentMonthNumber%-%CurrentMonth%\%CurrentDay%\%para_Label%
+
+	FileDelete, %l_ArchivePath%
+	FileAppend, %para_VarToArchive%, % l_ArchivePath
+	Return %l_ArchivePath%
+}
+
+
+DownloadSpecified(para_FileToDownload,para_FileName)
+{
+	SaveLocation = %A_ScriptDir%\Data\temp\%para_FileName%
+	UrlDownloadToFile, %para_FileToDownload%, %SaveLocation%
+	Return
+}
+
+
+Fn_FileSize(para_File)
+{
+	l_FileSize := ;MakeThis Variable Empty
+	
+	;Check the size of the file specified in the Function argument/option
+	FileGetSize, l_FileSize, %para_File%, k
+	
+	;If the filesize is NOT blank
+	If (l_FileSize != "")
+	{
+		;Exit the Function with the value of the filesize
+		Return %l_FileSize%
+	}
+	;filesize was blank or not understood. Return 0
+	Return 0
+}
+
+
+Fn_ConvertEntryNumber(para_ProgramNumber)
+{
+	RegexMatch(para_ProgramNumber, "(\d+)(\D*)|(\d+)", RE_EntryNumber)
+	If (RE_EntryNumber2 != "")
+	{
+		RE_EntryNumber2 := Asc(RE_EntryNumber2)
+		RE_EntryNumber2 := RE_EntryNumber2 - 64
+	}
+	Else
+	{
+		RE_EntryNumber2 := 0
+	}
+	RE_EntryNumber := RE_EntryNumber1 * 100 + RE_EntryNumber2
+	Return %RE_EntryNumber%
+	;Return "ERROR Retrieving Entry Number"
+}
+
+
+Fn_ExtractEntryNumber(para_ProgramNumber)
+{
+	RegexMatch(para_ProgramNumber, "(\d*)", RE_EntryNumber)
+	If (RE_EntryNumber1 != "")
+	{
+		Return %RE_EntryNumber1%
+	}
+	Return "ERROR Retrieving Entry Number"	
+}
+
+
+Fn_DeleteDB()
+{
+	global
+	FileDelete, % Settings.General.SharedLocation . "\Data\archive\DBs\" . A_Today . "_" . The_VersionName . "DB.json"
+}
+
+
+;~~~~~~~~~~~~~~~~~~~~~
+; Variables
+;~~~~~~~~~~~~~~~~~~~~~
+
+StartUp()
+{
+	#NoEnv
+	#NoTrayIcon
+	#SingleInstance force
+}
+
+
+;~~~~~~~~~~~~~~~~~~~~~
+;GUI
+;~~~~~~~~~~~~~~~~~~~~~
+
+BuildGUI()
+{
+	Global
+	
+	CLI_Arg = %1%
+	if (CLI_Arg = "Wallboard") {
+		guiheight := 70
+		guiwidth := 330
+		
+		guiunhandledtextx := 10
+		guiversiontextx := 220
+		Gui +AlwaysOnTop
+	} else {
+		guiheight := 600
+		guiwidth := 490
+		guiunhandledtextx := 360
+		guiversiontextx := 380
+	}
+	
+	
+	Gui, Add, Text, x%guiversiontextx% y3 w100 +Right, % "v" The_VersionName
+	Gui, Add, Tab, x2 y0 w630 h700 , Scratches|Options
+	;Gui, Tab, Scratches
+	Gui, Add, Button, x2 y30 w100 h30 gUpdateButton vUpdateButton, Update
+	Gui, Add, Button, x102 y30 w100 h30 gCheckResults vCheckResults, Check Results
+	; if (Settings.General.ShiftNotesLocation != "") {
+	; 	Gui, Add, Button, x202 y30 w100 h30 gShiftNotes vShiftNotes, Open Shift Notes
+	; }
+	Gui, Add, Button, x202 y30 w100 h30 gSendEmail , Email List
+	Gui, Add, Button, x302 y30 w50 h30 gResetDB vResetDB, Reset DB
+	Gui, Add, ListView, x2 y70 w490 h536 Grid NoSort +ReDraw gDoubleClick vGUI_Listview, #|Status|Entered|Name|Race|
+	Gui, Add, Progress, x2 y60 w100 h10 vUpdateProgress, 1
+	
+	
+	;w200
+	Gui, Font, s30 w700, Arial
+	Gui, Add, Text, x%guiunhandledtextx% y24 w42 +Right vGUI_UnhandledScratches gMsgUnhandledScratches,
+	Gui, Add, Text, x410 y24, /
+	Gui, Font, s20 w700, Arial
+	Gui, Add, Text, x430 y24 w30 vGUI_TotalScratches gMsgTotalScratches,
+	Gui, Font, s10 w10, Arial
+	Gui, Add, Text, x434 y54 w30 vGUI_EffectedEntries gMsgEffectedEntries,
+	;Gui, Font, s30 w700, Arial
+	
+	Gui, Font, s6 w10, Arial
+	;Gui, Add, Text, x360 y30, Unhandled / Scratches
+	;Gui, Add, Text, x404 y58, Effected Entries:
+	Gui, Font,
+	
+	
+	Gui, Tab, Options
+	Gui, Add, CheckBox, x10 y30 vGUI_RefreshCheckBox gAutoUpdate, Auto-Update every
+	Gui, Add, edit, x122 y28 w30 vGUI_RefreshAmmount Number, 10
+	Gui, Add, text, x160 y30, minutes (cannot be lower than 10 mins)
+	GUI, Submit, NoHide
+	
+	;Gui, Add, Button, x2 y30 w100 h30 gUpdateButton, Update
+	;Option_Refresh
+	;Gui, Add, ListView, x2 y70 w490 h580 Grid Checked, #|Status|Name|Race
+	
+	;Menu
+	Menu, FileMenu, Add, &Update Now, UpdateButton
+	Menu, FileMenu, Add, R&estart`tCtrl+R, Menu_File-Restart
+	Menu, FileMenu, Add, E&xit`tCtrl+Q, Menu_File-Quit
+	Menu, MenuBar, Add, &File, :FileMenu  ; Attach the sub-menu that was created above
+	
+	Menu, HelpMenu, Add, &About, Menu_About
+	Menu, HelpMenu, Add, &Confluence`tCtrl+H, Menu_Confluence
+	Menu, MenuBar, Add, &Help, :HelpMenu
+	
+	Gui, Menu, MenuBar
+	
+	
+	if (CLI_Arg = "Wallboard") {
+		GuiControl, Hide, UpdateButton
+		GuiControl, Hide, UpdateProgress
+		GuiControl, Hide, CheckResults
+		GuiControl, Hide, ShiftNotes
+		GuiControl, Hide, ResetDB
+		;Check for new scratches every 15 mins
+		SetTimer, UpdateButton, 900000
+		
+		;Update Wallboard display number every 30 seconds
+		SetTimer, UpdateListView, 30000
+		Sb_RecountRecolorListView()
+	} else {
+		
+	}
+	Gui, Show, h%guiheight% w%guiwidth%, %The_ProjectName%
+	Return
+	
+	
+	MsgTotalScratches:
+	Msgbox, This shows the total number of coupled entry scratches
+	Return
+	
+	MsgUnhandledScratches:
+	Msgbox, This shows the number of coupled entries that have not been handled
+	Return
+	
+	MsgEffectedEntries:
+	Msgbox, This shows the number of coupled entries effected by scratches (1,1A,1X are considered a single entry)
+	Return
+	
+	;Options
+	AutoUpdate:
+	GUI, Submit, NoHide
+	RefreshMilli := 0
+	RefreshMilli := Fn_QuickRegEx(GUI_RefreshAmmount,"(\d+)")
+	
+	If (RefreshMilli >= 10 && GUI_RefreshCheckBox = 1) {
+		RefreshMilli := RefreshMilli * 60000
+		GuiControl,, GUI_RefreshCheckBox, 1
+		SetTimer, UpdateButton, -100
+		Sleep 300
+		SetTimer, UpdateButton, %RefreshMilli%
+	}
+	If (GUI_RefreshCheckBox = 0) {
+		GuiControl,, GUI_RefreshCheckBox, 0
+		SetTimer, UpdateButton, Off
+	}
+	Return
+	
+	
+	;Menu Shortcuts
+	Menu_Confluence:
+	Run https://betfairus.atlassian.net/wiki/display/wog/Ops+Tool+-+Scratch+Detector
+	Return
+	
+	Menu_About:
+	Msgbox, Checks Equibase for coupled entry scratches. Crosschecks with RacingChannel. `n%The_VersionName%
+	Return
+	
+	Menu_File-Restart:
+	Reload
+	Menu_File-Quit:
+	ExitApp
+	
+	
+	ShiftNotes:
+	Today:= %A_Now%
+	FormatTime, CurrentDateTime,, MMddyy
+	Run % Settings.General.ShiftNotesLocation . "\" . CurrentDateTime . ".xlsx"
+	Return
+	
+	ResetDB:
+	Fn_DeleteDB()
+	Fn_ImportDBData()
+	Sb_RecountRecolorListView()
+	Return
+
+	SendEmail:
+	MailObj := {}
+	MailObj.html := Sb_GenerateHTMLMail()
+	MailObj.subject := "Coupled Entry Scratches - " A_Today
+	MailObj.to := Config.mailto
+	; para_MailObj := "{""to"":""user@domain.com"", ""subject"": ""hello"", ""html"": ""<br><strong>hi</strong></br>"" }"
+	; msgbox, % Fn_JSONfromOBJ(MailObj)
+	clipboard := JSON.stringify(MailObj)
+	Fn_SendHTTPMail(JSON.stringify(MailObj),"http://wogutilityd01:8080/mail")
+	Return
+	
+	UpdateListView:
+	If (BusyVar != 1 && Fn_StripleadingZero(A_Hour) > 4 && CLI_Arg = "Wallboard") {
+		Fn_ImportDBData()
+		Sb_RecountRecolorListView()
+	}
+	Return
+}
+
+Fn_GUI_UpdateProgress(para_Progress1, para_Progress2 = 0)
+{
+	;Calculate progress if two parameters input. otherwise set if only one entered
+	If (para_Progress2 = 0)
+	{
+		GuiControl,, UpdateProgress, %para_Progress1%+
+	}
+	Else
+	{
+		para_Progress1 := (para_Progress1 / para_Progress2) * 100
+		GuiControl,, UpdateProgress, %para_Progress1%
+	}	
+}
+
+
+DoubleClick:
+;Send Horsename to Json file so it won't be highlighted
+If A_GuiEvent = DoubleClick
+{		
+	;Get the text from the row's fourth field. Runner Name
+	LV_GetText(RowText, A_EventInfo, 4)
+	
+	If !InStr(RowText,"■")
+	{
+		;Load any existing DB from other Ops
+		Fn_ImportDBData()
+		;Get Max size of object imported and Add one
+		X2 := SeenHorses_Array.MaxIndex()
+		X2 += 1
+		;Add the new name and Export
+		FormatTime, CurrentTime,, Time
+		SeenHorses_Array[X2,"HorseName"] := RowText
+		SeenHorses_Array[X2,"ScratchedonTVGTimeStamp"] := CurrentTime
+		Fn_ExportArray()
+		Sb_RecountRecolorListView()
+	}
+	
+	;Put all Shift note formatted Scratches onto the clipboard if user double-clicked a '■ TrackName'
+	If (InStr(RowText,"■"))
+	{
+		Clip =
+		Ignore_Bool := True
+		TrackName := Fn_QuickRegEx(RowText,"■ (.+)")
+		;Cycle the entire Listview
+		Loop % LV_GetCount()
+		{
+			;Hold each row in Buffer_ variables
+			LV_GetText(Buffer_Name, A_Index, 4)
+			LV_GetText(Buffer_Status, A_Index, 2)
+			LV_GetText(Buffer_ProgramNumber, A_Index, 1)
+			LV_GetText(Buffer_Race, A_Index, 5)
+			;Reset ignore flag if a new track is loaded into memory
+			If (InStr("■",Buffer_Name) && Ignore_Bool = False) ;NOTE - Note sure why but leave "■" as the haystack
+			{
+				Ignore_Bool := True
+
+			}
+			;Cycle all the way to the Row user double-clicked
+			If (InStr(Buffer_Name,TrackName))
+			{
+				Ignore_Bool := False
+				Continue
+			}
+			If (InStr(Buffer_Name,"Racing Channel"))
+			{
+				Ignore_Bool := True
+			}
+			;Get the Race Number as a header, lead, thing
+			If (!InStr(Buffer_Name,"■") && Buffer_ProgramNumber = "" && Ignore_Bool = False)
+			{
+				If(Clip != "")
+				{
+					Clip := Clip . ")  "
+				}
+				Clip := Clip . Fn_QuickRegEx(Buffer_Name,"Race(\d+)")
+				Clip := Clip . "-("
+				FirstEntry_Bool := True
+			}
+			;Put each entry into the Clip; if its the first entry; don't put a comma in front
+			If (Buffer_ProgramNumber != "" && Buffer_Status != "" && Ignore_Bool = False)
+			{
+				If(FirstEntry_Bool = True)
+				{
+					Clip := Clip . Buffer_ProgramNumber
+					FirstEntry_Bool := False
+					Continue
+				}
+				Clip := Clip . "," . Buffer_ProgramNumber
+			}
+		}
+		If(Clip != "")
+		{
+			Clip := Clip . ")"
+		}
+		ClipBoard := Clip
+	}
+}
 Return
 
-;Menu Shortcuts
-Menu_Confluence:
-Run https://betfairus.atlassian.net/wiki/spaces/wog/pages/10650365/Ops+Tool+-+PPS2HTML+Automates+Free+Past+Performance+File+Renaming+and+HTML
-Return
 
-Menu_About:
-Msgbox, Renames Free PP files and generated HTML from all files run through the system. `nv%The_VersionName%
-Return
+DiableAllButtons()
+{
+	GuiControl, disable, Update
+	GuiControl, disable, Check Results
+	GuiControl, disable, Open Shift Notes
+}
 
-Menu_File-Quit:
-ExitApp
+
+EnableAllButtons()
+{
+	GuiControl, enable, Update
+	GuiControl, enable, Check Results
+	GuiControl, enable, Open Shift Notes
+}
+
+
+EndGUI()
+{
+	global
+	
+	Gui, Destroy
+}
+
+;Racing Channel Shut Down. Do not bother the user------------------------------
+;Fn_MouseToolTip("No RacingChannel Data Downloaded", 10)
+;MouseGetPos, M_PosX, M_PosY, WinID
+;ToolTip, "No RacingChannel Data Downloaded", M_PosX, M_PosY, 1
+;ToolTip
+
 
 GuiClose:
 ExitApp
-}
 
+;~~~~~~~~~~~~~~~~~~~~~
+;Subroutines
+;~~~~~~~~~~~~~~~~~~~~~
 
-;/--\--/--\--/--\--/--\--/--\
-; Subroutines
-;\--/--\--/--\--/--\--/--\--/
-
-;Create Directory and install needed file(s)
-Sb_InstallFiles()
+Sb_RecountRecolorListView()
 {
-FileCreateDir, %A_ScriptDir%\Data\
-FileCreateDir, %A_ScriptDir%\Data\Temp\
-FileInstall, Data\PDFtoTEXT.exe, %A_ScriptDir%\Data\PDFtoTEXT.exe, 1
-}
-
-;No Tray icon because it takes 2 seconds; Do not allow running more then one instance at a time
-StartUp()
-{
-#NoTrayIcon
-#SingleInstance force
-}
-
-Sb_GlobalNameSpace()
-{
-global
-
-Path_PDFtoHTML = %A_ScriptDir%\Data\
-AllTracks_Array := {Key:"", TrackName:"", DateTrack:"", FileName:""}
-AllTracks_ArraX = 1
-FirstGBLoop = 1
-
-
-tomorrowsyear := a_now
-tomorrowsyear += 1, days
-formattime, tomorrowsyear, %tomorrowsyear%, yyyy
-}
-
-
-
-
-Fn_Filename(para_trackname,para_date)
-{
-Global
-	If (!Options_suffix) {
-		Options_suffix := ""
+	global
+	Data_UnHandledRunners := 0
+	Data_TotalScratches := 0
+	LVA_EraseAllCells("GUI_Listview")
+	
+	Loop % LV_GetCount() {
+		The_OuterIndex := A_Index
+		LV_GetText(Buffer_ProgramNumber, A_Index, 1)
+		LV_GetText(Buffer_Status, A_Index, 2)
+		LV_GetText(Buffer_Name, A_Index, 4) ;Commonly the Horsename but sometimes not. 
+		If (InStr(Buffer_Name,"■"))	{
+			LVA_SetCell("GUI_Listview", A_Index, 0, "f0f0f0") ;Set to grey if this is a track header
+			Continue
+		}
+		If (InStr(Buffer_Name, "►")) {
+			LVA_SetCell("GUI_Listview", A_Index, 0, "b7ffb7") ;Set to light green if this is an added wager pool
+			Continue
+		}
+		If (Buffer_ProgramNumber != "") {
+			If (Buffer_Status != "") {
+				Data_TotalScratches += 1
+			}
+			
+			Loop, % SeenHorses_Array.MaxIndex()	{
+				If (SeenHorses_Array[A_Index,"HorseName"] = Buffer_Name) {
+					LV_Modify(The_OuterIndex, , , , SeenHorses_Array[A_Index,"ScratchedonTVGTimeStamp"])
+					If (Buffer_Status = "RE-LIVENED") {
+						LVA_SetCell("GUI_Listview", The_OuterIndex, 0, "red") ;Set to Red if it is a "RE-LIVENED" Horse
+						Data_UnHandledRunners += 1
+					}
+					Continue 2
+				}
+			}
+			If (Buffer_Status = "Scratched")	{
+				LVA_SetCell("GUI_Listview", A_Index, 0, "ff7f27") ;Set to Orange if this horse hasn't been doubleclicked yet.
+				Data_UnHandledRunners += 1
+			}
+			If (Buffer_Status = "RE-LIVENED") {
+				LVA_SetCell("GUI_Listview", A_Index, 0, "red") ;Set to Red if it is a "RE-LIVENED" Horse
+			}
+		}
 	}
-	;msgbox, % para_trackname . para_date ".pdf"
-	return para_trackname . para_date ".pdf"
+	
+	;Fix Default Size of all Columns in Listview
+	LV_ModifyCol(1)
+	LV_ModifyCol(2)
+	LV_ModifyCol(3, 60)
+	LV_ModifyCol(4)
+	LV_ModifyCol(5, 40)
+	LV_ModifyCol(6, 100)
+	
+	;Refresh the Listview colors (Redraws the GUI Control
+	LVA_Refresh("GUI_Listview")
+	OnMessage("0x4E", "LVA_OnNotify")
+	Guicontrol, +ReDraw, GUI_Listview
+	LVA_Refresh("GUI_Listview")
+	LVA_Refresh("GUI_Listview")
+	
+	
+	;Send Runner numbers to GUI
+	If (Data_UnHandledRunners = 0)
+	{
+		GuiControl, +cBlack, GUI_UnhandledScratches,
+	}
+	If (Data_UnHandledRunners > 0)
+	{
+		GuiControl, +cff7f27, GUI_UnhandledScratches,
+		;Sb_FlashGUI()
+	}
+	If (Data_UnHandledRunners > 4)
+	{
+		GuiControl, +cRed, GUI_UnhandledScratches,
+	}
+	GuiControl, Text, GUI_UnhandledScratches, % Data_UnHandledRunners
+	GuiControl, Text, GUI_TotalScratches, % Data_TotalScratches
+}
+
+Sb_GenerateHTMLMail()
+{
+	global
+	
+	;;Generate e-mail HTML
+	FormatTime, LongDate,, LongDate
+	EmailBody := "Coupled Entry Scratches " . LongDate . ":<br><br>"
+	EmailBody = %EmailBody% <style type="text/css">
+	EmailBody := EmailBody . ".tg  {border-collapse:collapse;border-spacing:0;border-color:#ccc;}"
+	EmailBody := EmailBody . ".tg td{font-family:Arial, sans-serif;font-size:14px;padding:10px 5px;border-style:solid;border-width:1px;overflow:hidden;word-break:normal;border-color:#ccc;color:#333;background-color:#fff;}"
+	EmailBody := EmailBody . ".tg th{font-family:Arial, sans-serif;font-size:14px;font-weight:normal;padding:10px 5px;border-style:solid;border-width:1px;overflow:hidden;word-break:normal;border-color:#ccc;color:#333;background-color:#f0f0f0;}"
+	EmailBody := EmailBody . ".tg .tg-4eph{background-color:#f9f9f9}"
+	EmailBody = %EmailBody% </style>
+	<table class="tg">
+	<tbody>
+	<tr>
+	<th class="tg-031e">#</th>
+	<th class="tg-031e">Status</th>
+	<th class="tg-031e"></th>
+	<th class="tg-031e">Name</th>
+	</tr>
+
+	Loop % LV_GetCount() {
+		The_OuterIndex := A_Index
+		LV_GetText(Buffer_ProgramNumber, A_Index, 1)
+		LV_GetText(Buffer_Status, A_Index, 2)
+		LV_GetText(Buffer_Name, A_Index, 4) ;Commonly the Horsename but sometimes not. 
+		
+		
+		;Alternate the Table color style
+		Alternate := Mod(A_Index, 2)
+		If (Alternate = 1) {
+			HTMLClass = class="tg-031e"
+		} Else {
+			HTMLClass = class="tg-4eph"
+		}
+		
+		StringReplace, Buffer_Name, Buffer_Name, ■, , All
+		EmailBody = %EmailBody%<tr>
+		<td %HTMLClass%>%Buffer_ProgramNumber%</td>
+		<td %HTMLClass%>%Buffer_Status%</td>
+		<td %HTMLClass%> </td>
+		<td %HTMLClass%>%Buffer_Name%</td>
+		</tr>
+	}
+
+	EmailBody = %EmailBody%	</tbody>
+	</table>
+
+	EmailBody = %EmailBody%<br><br><br><strong> TVG Wager Operations</strong><br>
+	EmailBody = %EmailBody%&#128222;(503) 748-3823<br>
+	EmailBody = %EmailBody%<small>This email (which includes any attachment and any subsequent reply) is sent for and on behalf of one or more operating entities in the Betfair Group, details of which are available <a href="http://corporate.betfair.com/about-us.aspx">here</a>. The information in this e-mail is confidential. As such it is intended only for the named recipient(s). This e-mail may not be disclosed or used by any person other than the addressee, nor may it be copied in any way. If you are not a named recipient please notify the sender immediately and delete any copies of this email. Any unauthorized copying, disclosure or distribution of the material in this e-mail is strictly forbidden. Any view or opinions expressed do not reflect those of the author and do not necessarily represent those of the Betfair Group. Betfair&#174; and the BETFAIR LOGO are registered trademarks of The Sporting Exchange Limited.</small><br>
+
+	return EmailBody
+}
+
+
+SC_NotifyNewScratches(para_RandomInput)
+{
+	global
+	;Create storage if not existing yet
+	If (Scratches_Array = "") {
+		Scratches_Array := []
+	}
+	Scratches_Array.push(para_RandomInput)
+	;8 seconds
+	SetTimer, EmailChanges, -8000
+	Return
+
+
+	EmailChanges:
+	Email_Array := []
+	;loop all coupled entry horsenames
+	Loop, Scratches_Array.MaxIndex() {
+		If (Fn_SeenBeforeChecker(Scratches_Array[A_Index])) {
+			Email_Array.push(Scratches_Array[A_Index])
+		}
+	}
+
+	If (Email_Array.MaxIndex() != 0) {
+		;Fn_SendEmail(Email_Array)
+	}
+}
+
+Sb_SettingsImport()
+{
+	global
+	
+	SettingsFile = %A_ScriptDir%\Settings.ini
+	if !(Settings := Fn_IniRead(SettingsFile))
+	{
+		Settings =
+		( LTrim
+		[General]`n`r
+		SharedLocation = \\tvgops\pdxshares\wagerops\Tools\Scratch-Detector`n`r
+		ShiftNotesLocation = \\tvgops\pdxshares\wagerops\Daily Shift Notes`n`r
+		)
+		
+		File := FileOpen(SettingsFile, "w")
+		File.Write(Settings), File.Close()
+		
+		MsgBox, There was a problem reading your settings file. A new Settings.ini was generated.`nRe-running the program will now use default settings.
+		
+		ExitApp
+	}
+	
+}
+
+
+Sb_DownloadAllRacingChannel()
+{
+	;Clear Dir
+	FileRemoveDir, %A_ScriptDir%\Data\temp, 1
+	FileCreateDir, %A_ScriptDir%\Data\temp
+
+	;Download TBred and Harness from RacingChannel
+	FileCreateDir, %A_ScriptDir%\Data\temp\RacingChannel
+	FileCreateDir, %A_ScriptDir%\Data\temp\RacingChannel\TBred
+	DownloadSpecified("http://tote.racingchannel.com/MEN----T.PHP","RacingChannel\TBred_Index.html")
+	
+	
+	;Download each racing channel page that is part of the index page
+	Loop, Read, %A_ScriptDir%\Data\temp\RacingChannel\TBred_Index.html
+	{
+		REG = A HREF="(\S+)"><IMG SRC="\/images\/CHG.gif        ;"
+		Buffer_TrackCode := Fn_QuickRegEx(A_LoopReadLine,REG)
+		If (Buffer_TrackCode != "null")
+		{
+			UrlDownloadToFile, https://tote.racingchannel.com/%Buffer_TrackCode%, %A_ScriptDir%\Data\temp\RacingChannel\TBred\%Buffer_TrackCode%
+		}
+	}
+	
+	FileCreateDir, %A_ScriptDir%\Data\temp\RacingChannel
+	FileCreateDir, %A_ScriptDir%\Data\temp\RacingChannel\Harness
+	DownloadSpecified("http://tote.racingchannel.com/MEN----H.PHP","RacingChannel\Harness_Index.html")
+	
+	Loop, Read, %A_ScriptDir%\Data\temp\RacingChannel\Harness_Index.html
+	{
+		REG = A HREF="(\S+)"><IMG SRC="\/images\/CHG.gif        ;"
+		Buffer_TrackCode := Fn_QuickRegEx(A_LoopReadLine,REG)
+		If (Buffer_TrackCode != "null")
+		{
+			UrlDownloadToFile, https://tote.racingchannel.com/%Buffer_TrackCode%, %A_ScriptDir%\Data\temp\RacingChannel\Harness\%Buffer_TrackCode%
+		}
+	}
+}
+
+
+Sb_FlashGUI()
+{
+	SetTimer, FlashGUI, -1000
+	Return
+	FlashGUI:
+	
+	Loop, 6
+	{
+		Gui Flash
+		Sleep 500  ;Do not change this value
+	}
+	Return
+}
+
+;~~~~~~~~~~~~~~~~~~~~~
+;Timers
+;~~~~~~~~~~~~~~~~~~~~~
+
+Fn_MouseToolTip(para_Message, 10)
+{
+	Global The_Message := para_Message
+	ToolTip_X := 0
+	MouseToolTip:
+	SetTimer, MouseToolTip, 100
+	MouseGetPos, M_PosX, M_PosY, WinID
+	ToolTip, %The_Message%, M_PosX, M_PosY, 1
+	ToolTip_X += 1
+	If(ToolTip_X = 100)
+	{
+		ToolTip
+		SetTimer, MouseToolTip, Off
+	}
+	return
 }
